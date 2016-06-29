@@ -108,6 +108,7 @@ public class StructureJdbcRepository extends AbstractJdbcRepository implements S
     }
 
     @Override
+    @Cacheable(Caches.BRANCHES)
     public Branch getBranch(ID branchId) {
         try {
             return getNamedParameterJdbcTemplate().queryForObject(
@@ -159,6 +160,7 @@ public class StructureJdbcRepository extends AbstractJdbcRepository implements S
     }
 
     @Override
+    @CacheEvict(cacheNames = Caches.BRANCHES, key = "#branch.id")
     public void saveBranch(Branch branch) {
         // Update
         try {
@@ -175,6 +177,7 @@ public class StructureJdbcRepository extends AbstractJdbcRepository implements S
     }
 
     @Override
+    @CacheEvict(Caches.BRANCHES)
     public Ack deleteBranch(ID branchId) {
         return Ack.one(
                 getNamedParameterJdbcTemplate().update(

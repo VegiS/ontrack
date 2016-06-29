@@ -23,7 +23,8 @@ public class CacheConfig {
         o.setCaches(
                 Arrays.asList(
                         new GuavaCacheFactoryBean(Caches.SETTINGS, 1, ONE_DAY).getObject(),
-                        new GuavaCacheFactoryBean(Caches.PROJECTS, 50, ONE_DAY).getObject()
+                        new GuavaCacheFactoryBean(Caches.PROJECTS, 50, ONE_DAY).getObject(),
+                        new GuavaCacheFactoryBean(Caches.BRANCHES, 500, ONE_DAY).getObject()
                 )
         );
         return o;
