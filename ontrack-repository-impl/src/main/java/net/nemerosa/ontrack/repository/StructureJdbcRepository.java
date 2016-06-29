@@ -1,5 +1,6 @@
 package net.nemerosa.ontrack.repository;
 
+import net.nemerosa.ontrack.common.Caches;
 import net.nemerosa.ontrack.common.Document;
 import net.nemerosa.ontrack.model.Ack;
 import net.nemerosa.ontrack.model.exceptions.*;
@@ -7,6 +8,8 @@ import net.nemerosa.ontrack.model.structure.*;
 import net.nemerosa.ontrack.repository.support.AbstractJdbcRepository;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.stereotype.Repository;
@@ -57,6 +60,7 @@ public class StructureJdbcRepository extends AbstractJdbcRepository implements S
     }
 
     @Override
+    @Cacheable(Caches.PROJECTS)
     public Project getProject(ID projectId) {
         try {
             return getNamedParameterJdbcTemplate().queryForObject(
@@ -81,6 +85,7 @@ public class StructureJdbcRepository extends AbstractJdbcRepository implements S
     }
 
     @Override
+    @CacheEvict(cacheNames = {Caches.PROJECTS}, key = "#project.id")
     public void saveProject(Project project) {
         getNamedParameterJdbcTemplate().update(
                 "UPDATE PROJECTS SET NAME = :name, DESCRIPTION = :description, DISABLED = :disabled WHERE ID = :id",
@@ -92,6 +97,7 @@ public class StructureJdbcRepository extends AbstractJdbcRepository implements S
     }
 
     @Override
+    @CacheEvict(Caches.PROJECTS)
     public Ack deleteProject(ID projectId) {
         return Ack.one(
                 getNamedParameterJdbcTemplate().update(
