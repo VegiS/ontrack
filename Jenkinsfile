@@ -15,8 +15,9 @@ node('docker') {
     ]
 
     // Run the Gradle build and builds the Docker image
-    withEnv(environment) {
-        sh """./gradlew \\
+    try {
+        withEnv(environment) {
+            sh """./gradlew \\
             clean \\
             versionDisplay \\
             versionFile \\
@@ -31,9 +32,11 @@ node('docker') {
             --no-daemon \\
             -Dorg.gradle.jvmargs="-Xmx3072m"
             """
+        }
+    } finally {
+        // Archiving the tests
+        step([$class: 'JUnitResultArchiver', testResults: '**/build/test-results/*.xml'])
     }
-    // Archiving the tests
-    step([$class: 'JUnitResultArchiver', testResults: '**/build/test-results/*.xml'])
     // TODO Ontrack build
 
     // Extracts the version from the file
