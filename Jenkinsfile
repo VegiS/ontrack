@@ -6,39 +6,28 @@ node('docker') {
     // Get some code from a GitHub repository
     checkout scm
 
-    // Get the JDK
-    // TODO Using a Docker image build means that we do not need a JDK installation any longer
-    def javaHome = tool name: 'JDK8u74', type: 'hudson.model.JDK'
-
-    // Environment
-    def environment = [
-            "JAVA_HOME=${javaHome}",
-    ]
-
     // Run the Gradle build and builds the Docker image
-    try {
-        docker.build('nemerosa/ontrack-build', 'jenkins/build').inside {
-            withEnv(environment) {
-                sh """./gradlew \\
-                    clean \\
-                    versionDisplay \\
-                    versionFile \\
-                    test \\
-                    integrationTest \\
-                    osPackages \\
-                    build \\
-                    --info \\
-                    --stacktrace \\
-                    --profile \\
-                    --console plain \\
-                    --no-daemon \\
-                    -Dorg.gradle.jvmargs="-Xmx3072m"
-                    """
-            }
+    docker.build('nemerosa/ontrack-build', 'jenkins/build').inside {
+        try {
+            sh """./gradlew \\
+                clean \\
+                versionDisplay \\
+                versionFile \\
+                test \\
+                integrationTest \\
+                osPackages \\
+                build \\
+                --info \\
+                --stacktrace \\
+                --profile \\
+                --console plain \\
+                --no-daemon \\
+                -Dorg.gradle.jvmargs="-Xmx3072m"
+                """
+        } finally {
+            // Archiving the tests
+            step([$class: 'JUnitResultArchiver', testResults: '**/build/test-results/*.xml'])
         }
-    } finally {
-        // Archiving the tests
-        step([$class: 'JUnitResultArchiver', testResults: '**/build/test-results/*.xml'])
     }
     // TODO Ontrack build
 
