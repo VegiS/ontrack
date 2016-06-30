@@ -22,6 +22,7 @@ node('docker') {
                 --profile \\
                 --console plain \\
                 --no-daemon \\
+                -PbowerOptions='--allow-root' \\
                 -Dorg.gradle.jvmargs="-Xmx3072m"
                 """
         } finally {
