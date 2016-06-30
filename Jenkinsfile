@@ -1,4 +1,7 @@
-node('ontrack') {
+stage 'Build'
+
+// On a generic Docker slave
+node('docker') {
 
     // Get some code from a GitHub repository
     checkout scm
@@ -10,9 +13,6 @@ node('ontrack') {
     def environment = [
             "JAVA_HOME=${javaHome}",
     ]
-
-    // Mark the code build 'stage'....
-    stage 'Build'
 
     // Run the Gradle build and builds the Docker image
     withEnv(environment) {
@@ -41,20 +41,30 @@ node('ontrack') {
     env.VERSION_DISPLAY = versionInfo.VERSION_DISPLAY
     echo "Version = ${env.VERSION_DISPLAY}"
 
-    // Local acceptance tests
+    // TODO Local acceptance tests
     stage 'Local acceptance'
-    withEnv(environment) {
-        sh """./gradlew \\
-            ciAcceptanceTest \\
-            --info \\
-            --profile \\
-            --stacktrace
-            --console plain \\
-            --no-daemon \\
-            -Dorg.gradle.jvmargs="-Xmx3072m"
-            """
-    }
+
+//    withEnv(environment) {
+//        sh """./gradlew \\
+//            ciAcceptanceTest \\
+//            --info \\
+//            --profile \\
+//            --stacktrace
+//            --console plain \\
+//            --no-daemon \\
+//            -Dorg.gradle.jvmargs="-Xmx3072m"
+//            """
+//    }
     // Archiving the tests
-    step([$class: 'JUnitResultArchiver', testResults: '*-tests.xml'])
+//    step([$class: 'JUnitResultArchiver', testResults: '*-tests.xml'])
     // TODO Ontrack validation
+
 }
+
+stage 'Docker'
+
+stage 'Acceptance'
+
+stage 'Publication'
+
+stage 'Production'
