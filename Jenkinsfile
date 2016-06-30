@@ -16,22 +16,24 @@ node('docker') {
 
     // Run the Gradle build and builds the Docker image
     try {
-        withEnv(environment) {
-            sh """./gradlew \\
-            clean \\
-            versionDisplay \\
-            versionFile \\
-            test \\
-            integrationTest \\
-            osPackages \\
-            build \\
-            --info \\
-            --stacktrace \\
-            --profile \\
-            --console plain \\
-            --no-daemon \\
-            -Dorg.gradle.jvmargs="-Xmx3072m"
-            """
+        docker.build('nemerosa/ontrack-build', 'jenkins/build').withRun {
+            withEnv(environment) {
+                sh """./gradlew \\
+                    clean \\
+                    versionDisplay \\
+                    versionFile \\
+                    test \\
+                    integrationTest \\
+                    osPackages \\
+                    build \\
+                    --info \\
+                    --stacktrace \\
+                    --profile \\
+                    --console plain \\
+                    --no-daemon \\
+                    -Dorg.gradle.jvmargs="-Xmx3072m"
+                    """
+            }
         }
     } finally {
         // Archiving the tests
