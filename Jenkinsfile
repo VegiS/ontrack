@@ -1,16 +1,7 @@
 node('ontrack') {
 
-    // Mark the code checkout 'stage'....
-    stage 'Checkout'
-
-    // List the environment variables
-    env.each { key, value ->
-        echo "ENV ${key} --> ${value}"
-    }
-
     // Get some code from a GitHub repository
-    // TODO Use the SCM URL from the environment? See above
-    git url: 'https://github.com/nemerosa/ontrack.git', branch: env.BRANCH_NAME
+    checkout scm
 
     // Get the JDK
     def javaHome = tool name: 'JDK8u74', type: 'hudson.model.JDK'
@@ -22,6 +13,7 @@ node('ontrack') {
 
     // Mark the code build 'stage'....
     stage 'Build'
+
     // Run the Gradle build and builds the Docker image
     withEnv(environment) {
         sh """./gradlew \\
