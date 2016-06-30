@@ -7,6 +7,7 @@ node('docker') {
     checkout scm
 
     // Get the JDK
+    // TODO Using a Docker image build means that we do not need a JDK installation any longer
     def javaHome = tool name: 'JDK8u74', type: 'hudson.model.JDK'
 
     // Environment
@@ -16,7 +17,7 @@ node('docker') {
 
     // Run the Gradle build and builds the Docker image
     try {
-        docker.build('nemerosa/ontrack-build', 'jenkins/build').withRun {
+        docker.build('nemerosa/ontrack-build', 'jenkins/build').inside {
             withEnv(environment) {
                 sh """./gradlew \\
                     clean \\
