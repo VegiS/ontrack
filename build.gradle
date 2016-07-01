@@ -1,3 +1,8 @@
+import net.nemerosa.ontrack.gradle.ComposeStop
+import net.nemerosa.ontrack.gradle.ComposeUp
+import net.nemerosa.ontrack.gradle.DockerStart
+import net.nemerosa.ontrack.gradle.DockerStop
+
 plugins {
     id 'net.nemerosa.versioning' version '1.7.1'
     id 'nebula.os-package' version '2.2.6'
@@ -23,6 +28,42 @@ apply from: "$rootDir/gradle/dependencies.gradle"
  */
 
 task build
+
+/**
+ * Integration test environment
+ */
+
+ext {
+    itJdbcUrl = project.properties.itJdbcUrl
+    itJdbcUsername = project.properties.itJdbcUsername
+    itJdbcPassword = project.properties.itJdbcPassword
+}
+
+// Pre-integration tests: starting Postgresql
+
+task preIntegrationTest(type: ComposeUp) {
+    machine = project.properties.itMachine
+    dir = file("${rootDir}/gradle/it")
+    projectFiles = ['docker-compose.yml']
+    projectName = project.properties.itProject
+    forceRecreate = false
+    // When done
+    doLast {
+        def jdbcUrl = "jdbc:postgresql://${host}:${getPublishedPort('db', 5432)}/ontrack"
+        project.ext.itJdbcUrl = jdbcUrl
+        logger.info("JDBC URL = ${project.ext.itJdbcUrl}")
+    }
+}
+
+// Post-integration tests: stopping Postgresql
+
+task postIntegrationTest(type: ComposeStop) {
+    machine = project.properties.itMachine
+    dir = file("${rootDir}/gradle/it")
+    projectFiles = ['docker-compose.yml']
+    projectName = project.properties.itProject
+    remove = true
+}
 
 /**
  * Java projects
@@ -68,6 +109,17 @@ configure(javaProjects) {
         jvmArgs '-Xmx512m'
         reports {
             html.enabled = false
+        }
+        dependsOn preIntegrationTest
+        finalizedBy postIntegrationTest
+        /**
+         * Sets the JDBC URL
+         */
+        doFirst {
+            println "Setting JDBC URL for IT: ${rootProject.ext.itJdbcUrl}"
+            systemProperty 'it.jdbc.url', rootProject.ext.itJdbcUrl
+            systemProperty 'it.jdbc.user', rootProject.ext.itJdbcUsername
+            systemProperty 'it.jdbc.password', rootProject.ext.itJdbcPassword
         }
     }
 
@@ -164,6 +216,12 @@ apply from: 'gradle/docker.gradle'
  */
 
 apply from: 'gradle/acceptance.gradle'
+
+/**
+ * Development tasks
+ */
+
+apply from: 'gradle/development.gradle'
 
 /**
  * Acceptance tasks for OS packaging

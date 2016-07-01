@@ -69,7 +69,7 @@ nexusStaging {
     packageGroup = 'net.nemerosa'
     username = ossrhUser
     password = ossrhPassword
-    numberOfRetries = 30
+    numberOfRetries = 60
     delayBetweenRetriesInMillis = 10000 // Workaround for OSSRH-21248
 }
 
@@ -254,22 +254,30 @@ task publicationGitHubReleaseJarUpload(type: GitHubReleaseUpload) {
     file = project.file("publication/ontrack-ui-${ontrackVersion}.jar")
 }
 
+task publicationGitHubReleasePostgresqlMigrationUpload(type: GitHubReleaseUpload) {
+    dependsOn publicationGitHubReleaseCreate
+    fileName = 'ontrack-postgresql-migration.jar'
+    fileType = 'application/zip'
+    file = project.file("publication/ontrack-postgresql-migration-${ontrackVersion}.jar")
+}
+
 task publicationGitHubReleaseDebianUpload(type: GitHubReleaseUpload) {
     dependsOn publicationGitHubReleaseCreate
     fileName = 'ontrack.deb'
     fileType = 'application/x-debian-package'
-    file = project.file("ontrack_${ontrackVersion}-1_all.deb")
+    file = project.file("ontrack_${ontrackVersion.replaceAll(/[^0-9\.-_]/, '')}-1_all.deb")
 }
 
 task publicationGitHubReleaseRpmUpload(type: GitHubReleaseUpload) {
     dependsOn publicationGitHubReleaseCreate
     fileName = 'ontrack.rpm'
     fileType = 'application/x-rpm'
-    file = project.file("ontrack-${ontrackVersion}-1.noarch.rpm")
+    file = project.file("ontrack-${ontrackVersion.replaceAll(/[^0-9\.-_]/, '')}-1.noarch.rpm")
 }
 
 task publicationGitHubReleaseUpload {
     dependsOn publicationGitHubReleaseJarUpload
+    dependsOn publicationGitHubReleasePostgresqlMigrationUpload
     dependsOn publicationGitHubReleaseDebianUpload
     dependsOn publicationGitHubReleaseRpmUpload
 }
@@ -306,3 +314,7 @@ task publicationRelease {
     dependsOn publicationMaven
     dependsOn publicationGitHubRelease
 }
+
+// Makes sure to not create a tag if the Maven publication is not OK
+
+publicationGitHubRelease.mustRunAfter publicationMaven

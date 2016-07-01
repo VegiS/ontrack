@@ -1,0 +1,22 @@
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath("org.springframework.boot:spring-boot-gradle-plugin:1.3.3.RELEASE")
+    }
+}
+
+apply plugin: 'spring-boot'
+
+dependencies {
+    compile libraries.spring_boot_starter
+    compile libraries.spring_boot_starter_jdbc
+    compile libraries.flyway
+    compile libraries.commons_lang3
+
+    runtime project(':ontrack-database')
+    runtime 'com.h2database:h2:1.4.189'
+    runtime libraries.postgresql
+
+}

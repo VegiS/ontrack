@@ -533,12 +533,10 @@ if (production) {
 --profile
 productionUpgrade
 -PontrackVersion=${VERSION_DISPLAY}
+-PproductionPostgresPassword=${ONTRACK_POSTGRESQL_PASSWORD}
 '''
         }
         publishers {
-            archiveArtifacts {
-                pattern 'build/*.tgz'
-            }
             downstreamParameterized {
                 trigger("${SEED_PROJECT}-${SEED_BRANCH}-acceptance-production") {
                     condition 'SUCCESS'
