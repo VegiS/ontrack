@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y \
 
 # Installs Docker Compose
 RUN curl -L https://github.com/docker/compose/releases/download/1.6.2/docker-compose-`uname -s`-`uname -m` > /usr/local/bin/docker-compose
+RUN chmod +x /usr/local/bin/docker-compose
 
 # Git configuration
 RUN git config --global user.email "jenkins@nemerosa.net" \
