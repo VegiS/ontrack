@@ -1,0 +1,16 @@
+ontrack:
+   image: nemerosa/ontrack:3.0-beta.5
+   restart: always
+   links:
+      - postgresql
+   ports:
+      - "8080:8080"
+postgresql:
+   image: postgres:9.5.2
+   restart: always
+   environment:
+      POSTGRES_DB      : ontrack
+      POSTGRES_USER    : ontrack
+      POSTGRES_PASSWORD: ontrack
+   ports:
+    - "5432:5432"

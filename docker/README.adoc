@@ -1,0 +1,31 @@
+= Deploying on Docker Cloud
+
+Create a stack:
+
+[source,bash]
+----
+docker-cloud stack create --name nemerosa-ontrack --file docker-cloud.yml
+----
+
+Create a cluster, for example:
+
+[source,bash]
+----
+docker-cloud nodecluster create nemerosa-cluster digitalocean fra1 1g
+----
+
+NOTE: The cluster is automatically started upon creation.
+
+Deploy the stack:
+
+[source,bash]
+----
+docker-cloud stack start nemerosa-ontrack
+----
+
+To see the list of services having been started:
+
+[source,bash]
+----
+docker-cloud service ps
+----
