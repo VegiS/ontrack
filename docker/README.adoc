@@ -38,3 +38,4 @@ Remaining actions:
 - [ ] Volumes for Postgres database
 - [ ] SSL proxy
 - [ ] DNS entry
+- [ ] InfluxDB & Grafana services
