@@ -29,3 +29,12 @@ To see the list of services having been started:
 ----
 docker-cloud service ps
 ----
+
+Remaining actions:
+
+- [ ] Using tags for the cluster & services
+- [ ] Postgresql credentials
+- [ ] Volumes for Ontrack security files
+- [ ] Volumes for Postgres database
+- [ ] SSL proxy
+- [ ] DNS entry
