@@ -43,6 +43,7 @@ ext {
 
 task preIntegrationTest(type: ComposeUp) {
     machine = project.properties.itMachine
+    host = project.properties.itHost
     dir = file("${rootDir}/gradle/it")
     projectFiles = ['docker-compose.yml']
     projectName = project.properties.itProject
