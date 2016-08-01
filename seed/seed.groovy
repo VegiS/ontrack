@@ -51,6 +51,8 @@ if (pos > 0) {
 println "BRANCH = ${BRANCH}"
 println "\tBranchType = ${branchType}"
 boolean release = branchType == 'release'
+// Only release/3.x going to production
+boolean production = release && BRANCH.startsWith('release/3')
 
 /**
  * Extracting the delivery archive
@@ -108,6 +110,7 @@ job("${SEED_PROJECT}-${SEED_BRANCH}-build") {
     }
     deliveryPipelineConfiguration('Commit', 'Build')
     jdk 'JDK8u25'
+    label 'master'
     scm {
         git {
             remote {
@@ -133,13 +136,13 @@ build
 --info
 --stacktrace
 --profile
---parallel
 '''
         environmentVariables {
             propertiesFile 'build/version.properties'
         }
     }
     publishers {
+        buildDescription '', '${VERSION_DISPLAY}', '', ''
         archiveJunit("**/build/test-results/*.xml")
         archiveArtifacts {
             pattern 'build/distributions/ontrack-*-delivery.zip'
@@ -183,6 +186,7 @@ job("${SEED_PROJECT}-${SEED_BRANCH}-acceptance-local") {
     }
     deliveryPipelineConfiguration('Commit', 'Local acceptance')
     jdk 'JDK8u25'
+    label 'master'
     parameters {
         // Link based on full version
         stringParam('VERSION', '', '')
@@ -202,6 +206,7 @@ ciAcceptanceTest
 '''
     }
     publishers {
+        buildDescription '', '${VERSION}', '', ''
         archiveJunit('*-tests.xml')
         if (release) {
             downstreamParameterized {
@@ -238,7 +243,7 @@ ciAcceptanceTest
             }
         }
         // Use display version
-        ontrackValidation SEED_PROJECT, SEED_BRANCH, '${VERSION_DISPLAY}', 'ACCEPTANCE'
+        ontrackValidation SEED_PROJECT, SEED_BRANCH, '${VERSION}', 'ACCEPTANCE'
     }
 }
 
@@ -256,6 +261,7 @@ if (release) {
         }
         deliveryPipelineConfiguration('Commit', 'Debian package acceptance')
         jdk 'JDK8u25'
+        label 'master'
         parameters {
             // Link based on full version
             stringParam('VERSION', '', '')
@@ -289,6 +295,7 @@ debAcceptanceTest
             }
             deliveryPipelineConfiguration('Commit', "CentOS ${centOsVersion} package acceptance")
             jdk 'JDK8u25'
+            label 'master'
             parameters {
                 // Link based on full version
                 stringParam('VERSION', '', '')
@@ -323,6 +330,7 @@ job("${SEED_PROJECT}-${SEED_BRANCH}-docker-push") {
     }
     deliveryPipelineConfiguration('Acceptance', 'Docker push')
     jdk 'JDK8u25'
+    label 'master'
     parameters {
         // Link based on full version
         stringParam('VERSION', '', '')
@@ -362,6 +370,7 @@ job("${SEED_PROJECT}-${SEED_BRANCH}-acceptance-do") {
     }
     deliveryPipelineConfiguration('Acceptance', 'Digital Ocean')
     jdk 'JDK8u25'
+    label 'master'
     parameters {
         // Link based on full version
         stringParam('VERSION', '', '')
@@ -401,6 +410,7 @@ job("${SEED_PROJECT}-${SEED_BRANCH}-publish") {
     }
     deliveryPipelineConfiguration('Release', 'Publish')
     jdk 'JDK8u25'
+    label 'master'
     parameters {
         // Link based on full version
         stringParam('VERSION', '', '')
@@ -445,9 +455,19 @@ docker logout
 """
         }
     }
-    if (release) {
+    if (production) {
         publishers {
             buildPipelineTrigger("${SEED_PROJECT}/${SEED_PROJECT}-${SEED_BRANCH}/${SEED_PROJECT}-${SEED_BRANCH}-production") {
+                parameters {
+                    currentBuild() // VERSION
+                }
+            }
+        }
+    }
+    publishers {
+        downstreamParameterized {
+            trigger("${SEED_PROJECT}-${SEED_BRANCH}-site") {
+                condition('SUCCESS')
                 parameters {
                     currentBuild() // VERSION
                 }
@@ -471,7 +491,48 @@ ontrack.build('${SEED_PROJECT}', '${SEED_BRANCH}', VERSION_DISPLAY).config {
     }
 }
 
-if (release) {
+// Site job
+
+job("${SEED_PROJECT}-${SEED_BRANCH}-site") {
+    logRotator {
+        numToKeep(40)
+        artifactNumToKeep(5)
+    }
+    deliveryPipelineConfiguration('Release', 'Site')
+    jdk 'JDK8u25'
+    label 'master'
+    parameters {
+        // Link based on full version
+        stringParam('VERSION', '', '')
+    }
+    wrappers {
+        injectPasswords()
+        credentialsBinding {
+            usernamePassword 'GITHUB_USER', 'GITHUB_PASSWORD', PROJECT_SCM_CREDENTIALS
+        }
+    }
+    extractDeliveryArtifacts delegate
+    steps {
+            gradle """\
+--build-file site.gradle
+--info
+--profile
+--stacktrace
+-PontrackVersion=\${VERSION_DISPLAY}
+-PontrackGitHubUri=${PROJECT_SCM_URL}
+-PontrackGitHubPages=gh-pages
+-PontrackGitHubUser=\${GITHUB_USER}
+-PontrackGitHubPassword=\${GITHUB_PASSWORD}
+site
+"""
+    }
+    publishers {
+        // Use display version
+        ontrackValidation SEED_PROJECT, SEED_BRANCH, '${VERSION_DISPLAY}', 'SITE'
+    }
+}
+
+if (production) {
 
     // Production deployment
 
@@ -482,6 +543,7 @@ if (release) {
         }
         deliveryPipelineConfiguration('Release', 'Production')
         jdk 'JDK8u25'
+        label 'master'
         parameters {
             // Link on version
             stringParam('VERSION', '', '')
@@ -524,6 +586,7 @@ productionUpgrade
         }
         deliveryPipelineConfiguration('Release', 'Production acceptance')
         jdk 'JDK8u25'
+        label 'master'
         parameters {
             // Link on version
             stringParam('VERSION', '', '')
@@ -572,6 +635,7 @@ job("${SEED_PROJECT}-${SEED_BRANCH}-setup") {
         artifactNumToKeep(1)
     }
     jdk 'JDK8u25'
+    label 'master'
     wrappers {
         injectPasswords()
     }

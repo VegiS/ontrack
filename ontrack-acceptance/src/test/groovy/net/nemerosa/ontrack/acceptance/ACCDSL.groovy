@@ -24,14 +24,17 @@ class ACCDSL extends AbstractACCDSL {
         def testBranch = doCreateBranch()
         def projectName = testBranch.project.name.asText()
         def branchName = testBranch.name.asText()
-        // Anonymous client
-        Ontrack ontrack = ontrackBuilder.build()
-        // Branch cannot be found
-        try {
-            ontrack.branch(projectName, branchName)
-            Assert.fail "Branch access should have been forbidden"
-        } catch (OTNotFoundException ex) {
-            assert ex.message == "Branch not found: ${projectName}/${branchName}"
+        // Removes 'grant view to all'
+        withNotGrantProjectViewToAll {
+            // Anonymous client
+            Ontrack ontrack = ontrackBuilder.build()
+            // Branch cannot be found
+            try {
+                ontrack.branch(projectName, branchName)
+                Assert.fail "Branch access should have been forbidden"
+            } catch (OTNotFoundException ex) {
+                assert ex.message == "Branch not found: ${projectName}/${branchName}" as String
+            }
         }
     }
 
@@ -1532,6 +1535,46 @@ class ACCDSL extends AbstractACCDSL {
     }
 
     @Test
+    void 'Configuration - SVN and JIRA'() {
+        def jiraName = uid('J')
+        def svnName = uid('S')
+        ontrack.configure {
+            jira jiraName, 'http://jira'
+            svn svnName, url: 'svn://localhost', user: 'admin', password: 'secret', issueServiceConfigurationIdentifier: "jira//${jiraName}"
+        }
+        // Checks the SVN configuration
+        def svn = ontrack.config.svn.find { it.name == svnName }
+        assert svn != null
+        assert svn.name == svnName
+        assert svn.url == 'svn://localhost'
+        assert svn.user == 'admin'
+        assert svn.password == ''
+        assert svn.issueServiceConfigurationIdentifier == "jira//${jiraName}"
+    }
+
+    @Test
+    void 'Configuration - SVN and non existing JIRA'() {
+        def jiraName = uid('J')
+        validationError "Issue service configuration cannot be validated: jira//${jiraName}", {
+            def svnName = uid('S')
+            ontrack.configure {
+                svn svnName, url: 'svn://localhost', user: 'admin', password: 'secret', issueServiceConfigurationIdentifier: "jira//${jiraName}"
+            }
+        }
+    }
+
+    @Test
+    void 'Configuration - SVN and wrong format for JIRA identifier'() {
+        def jiraName = uid('J')
+        validationError "Wrong format for an issue service configuration ID: jira:${jiraName}", {
+            def svnName = uid('S')
+            ontrack.configure {
+                svn svnName, url: 'svn://localhost', user: 'admin', password: 'secret', issueServiceConfigurationIdentifier: "jira:${jiraName}"
+            }
+        }
+    }
+
+    @Test
     void 'Configuration - Artifactory'() {
         def name = uid('A')
         ontrack.configure {
@@ -1553,11 +1596,11 @@ class ACCDSL extends AbstractACCDSL {
         ontrack.configure {
             svn name, url: 'svn://localhost'
         }
-        assert ontrack.config.svn.findAll { it == name } == [name]
+        assert ontrack.config.svn.findAll { it.name == name }.collect { it.url } == ['svn://localhost']
         ontrack.configure {
             svn name, url: 'http://localhost'
         }
-        assert ontrack.config.svn.findAll { it == name } == [name]
+        assert ontrack.config.svn.findAll { it.name == name }.collect { it.url } == ['http://localhost']
     }
 
     @Test
@@ -1668,11 +1711,13 @@ shell.put('BUILD', build)
 
         // Shell call
         def output = new StringWriter()
-        def shell = Shell.create().withOutput(output)
+        def shell = Shell.withOutput(output)
         List<String> args = [
-                '--url', baseURL, '--user', 'admin', '--password', adminPassword, '--file', file.absolutePath,
+                '--discard-result',
+                '--url', baseURL, '--user', 'admin', '--password', adminPassword,
+                '--file', file.absolutePath,
                 '--value', "project=${projectName}" as String,
-                '--value', "branch=${branchName}" as String
+                '--value', "branch=${branchName}" as String,
         ]
         if (sslDisabled) {
             args << '--no-ssl'
