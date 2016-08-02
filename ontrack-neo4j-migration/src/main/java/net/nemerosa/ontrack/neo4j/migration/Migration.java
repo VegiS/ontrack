@@ -12,6 +12,7 @@ import net.nemerosa.ontrack.model.structure.*;
 import net.nemerosa.ontrack.repository.AccountGroupRepository;
 import net.nemerosa.ontrack.repository.AccountRepository;
 import net.nemerosa.ontrack.repository.StructureRepository;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.reflect.FieldUtils;
 import org.neo4j.ogm.model.Result;
 import org.slf4j.Logger;
@@ -319,7 +320,25 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         migrateAccountGroupLinks();
         // TODO Global permissions for groups
         // TODO Global permissions for accounts
-        // TODO LDAP mappings
+        // LDAP mappings
+        migrateGroupMappings();
+    }
+
+    private void migrateGroupMappings() {
+        h2.getJdbcOperations().query("SELECT * FROM ACCOUNT_GROUP_MAPPING", (RowCallbackHandler) rs -> {
+            String type = rs.getString("MAPPING");
+            template.query(
+                    String.format(
+                            "MATCH (g: AccountGroup {id: {groupId}}) " +
+                                    "CREATE (m:%sMapping {name: {name}})-[:MAPS_TO]->(g)",
+                            StringUtils.capitalize(type)
+                    ),
+                    ImmutableMap.<String, Object>builder()
+                            .put("groupId", rs.getInt("GROUPID"))
+                            .put("name", rs.getString("SOURCE"))
+                            .build()
+            );
+        });
     }
 
     private void migrateAccountGroupLinks() {
