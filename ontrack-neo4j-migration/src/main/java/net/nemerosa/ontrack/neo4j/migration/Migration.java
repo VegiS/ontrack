@@ -25,8 +25,6 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import javax.sql.DataSource;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
@@ -86,6 +84,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         // FIXME createUniqueIdGenerator("ValidationRun");
         // ----
         createUniqueIdGenerator("AccountGroup");
+        createUniqueIdGenerator("Account");
     }
 
     private void createUniqueIdGenerator(String label) {
@@ -316,10 +315,22 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         migrateGroups();
         // Accounts
         migrateAccounts();
-        // TODO Account groups
+        // Account groups
+        migrateAccountGroupLinks();
         // TODO Global permissions for groups
         // TODO Global permissions for accounts
         // TODO LDAP mappings
+    }
+
+    private void migrateAccountGroupLinks() {
+        h2.getJdbcOperations().query("SELECT * FROM ACCOUNT_GROUP_LINK", (RowCallbackHandler) rs -> template.query(
+                "MATCH (a: Account {id: {accountId}}), (g: AccountGroup {id: {groupId}}) " +
+                        "CREATE (a)-[:BELONGS_TO]->(g)",
+                ImmutableMap.<String, Object>builder()
+                        .put("accountId", rs.getInt("ACCOUNT"))
+                        .put("groupId", rs.getInt("ACCOUNTGROUP"))
+                        .build()
+        ));
     }
 
     private void migrateAccounts() {
