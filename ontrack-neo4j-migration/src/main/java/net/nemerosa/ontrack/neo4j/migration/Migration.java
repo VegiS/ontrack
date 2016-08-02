@@ -65,7 +65,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         template.query("MATCH (n) DETACH DELETE n", Collections.emptyMap());
         // Migrating the projects
         logger.info("Migrating projects...");
-        migrateProjects();
+        // FIXME migrateProjects();
         // Migrating ACL
         logger.info("Migrating ACL...");
         migrateACL();
@@ -78,12 +78,12 @@ public class Migration extends NamedParameterJdbcDaoSupport {
     }
 
     private void createUniqueIdGenerators() {
-        createUniqueIdGenerator("Project");
-        createUniqueIdGenerator("Branch");
-        createUniqueIdGenerator("PromotionLevel");
-        createUniqueIdGenerator("ValidationStamp");
-        createUniqueIdGenerator("Build");
-        createUniqueIdGenerator("ValidationRun");
+        // FIXME createUniqueIdGenerator("Project");
+        // FIXME createUniqueIdGenerator("Branch");
+        // FIXME createUniqueIdGenerator("PromotionLevel");
+        // FIXME createUniqueIdGenerator("ValidationStamp");
+        // FIXME createUniqueIdGenerator("Build");
+        // FIXME createUniqueIdGenerator("ValidationRun");
         // ----
         createUniqueIdGenerator("AccountGroup");
         createUniqueIdGenerator("Account");
@@ -325,27 +325,40 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         migrateAccounts();
         // Account groups
         migrateAccountGroupLinks();
-        // TODO Global permissions for groups
+        // Global permissions for groups
+        migrateGlobalGroupPermissions();
         // TODO Global permissions for accounts
+        // TODO Project permissions for groups
+        // TODO Project permissions for accounts
         // LDAP mappings
         migrateGroupMappings();
     }
 
+    private void migrateGlobalGroupPermissions() {
+        h2.getJdbcOperations().query("SELECT * FROM GROUP_GLOBAL_AUTHORIZATIONS", (RowCallbackHandler) rs ->
+                template.query(
+                        "MATCH (g: AccountGroup {id: {groupId}}) " +
+                                "MERGE (r: GlobalRole {name: {role}}) " +
+                                "MERGE (g)-[:HAS_ROLE]->(r)",
+                        ImmutableMap.<String, Object>builder()
+                                .put("groupId", rs.getInt("ACCOUNTGROUP"))
+                                .put("role", rs.getString("ROLE"))
+                                .build()
+                ));
+    }
+
     private void migrateGroupMappings() {
-        h2.getJdbcOperations().query("SELECT * FROM ACCOUNT_GROUP_MAPPING", (RowCallbackHandler) rs -> {
-            String type = rs.getString("MAPPING");
-            template.query(
-                    String.format(
-                            "MATCH (g: AccountGroup {id: {groupId}}) " +
-                                    "CREATE (m:%sMapping {name: {name}})-[:MAPS_TO]->(g)",
-                            StringUtils.capitalize(type)
-                    ),
-                    ImmutableMap.<String, Object>builder()
-                            .put("groupId", rs.getInt("GROUPID"))
-                            .put("name", rs.getString("SOURCE"))
-                            .build()
-            );
-        });
+        h2.getJdbcOperations().query("SELECT * FROM ACCOUNT_GROUP_MAPPING", (RowCallbackHandler) rs -> template.query(
+                String.format(
+                        "MATCH (g: AccountGroup {id: {groupId}}) " +
+                                "CREATE (m:%sMapping {name: {name}})-[:MAPS_TO]->(g)",
+                        StringUtils.capitalize(rs.getString("MAPPING"))
+                ),
+                ImmutableMap.<String, Object>builder()
+                        .put("groupId", rs.getInt("GROUPID"))
+                        .put("name", rs.getString("SOURCE"))
+                        .build()
+        ));
     }
 
     private void migrateAccountGroupLinks() {
@@ -360,22 +373,20 @@ public class Migration extends NamedParameterJdbcDaoSupport {
     }
 
     private void migrateAccounts() {
-        h2.getJdbcOperations().query("SELECT * FROM ACCOUNTS", (RowCallbackHandler) rs -> {
-            template.query(
-                    "CREATE (a:Account {id: {id}, name: {name}, fullName: {fullName}, email: {email}, mode: {mode}, password: {password}, role: {role}, createdAt: {createdAt}, createdBy: {createdBy}})",
-                    ImmutableMap.<String, Object>builder()
-                            .put("id", rs.getInt("ID"))
-                            .put("name", rs.getString("NAME"))
-                            .put("fullName", rs.getString("FULLNAME"))
-                            .put("email", rs.getString("EMAIL"))
-                            .put("mode", rs.getString("MODE"))
-                            .put("password", rs.getString("PASSWORD"))
-                            .put("role", rs.getString("ROLE"))
-                            .put("createdAt", Time.toJavaUtilDate(Time.now()))
-                            .put("createdBy", MIGRATION_USER)
-                            .build()
-            );
-        });
+        h2.getJdbcOperations().query("SELECT * FROM ACCOUNTS", (RowCallbackHandler) rs -> template.query(
+                "CREATE (a:Account {id: {id}, name: {name}, fullName: {fullName}, email: {email}, mode: {mode}, password: {password}, role: {role}, createdAt: {createdAt}, createdBy: {createdBy}})",
+                ImmutableMap.<String, Object>builder()
+                        .put("id", rs.getInt("ID"))
+                        .put("name", rs.getString("NAME"))
+                        .put("fullName", rs.getString("FULLNAME"))
+                        .put("email", rs.getString("EMAIL"))
+                        .put("mode", rs.getString("MODE"))
+                        .put("password", rs.getString("PASSWORD"))
+                        .put("role", rs.getString("ROLE"))
+                        .put("createdAt", Time.toJavaUtilDate(Time.now()))
+                        .put("createdBy", MIGRATION_USER)
+                        .build()
+        ));
     }
 
     private void migrateGroups() {
