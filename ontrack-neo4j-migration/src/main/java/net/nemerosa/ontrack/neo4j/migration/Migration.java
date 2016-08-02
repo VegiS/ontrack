@@ -65,7 +65,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         template.query("MATCH (n) DETACH DELETE n", Collections.emptyMap());
         // Migrating the projects
         logger.info("Migrating projects...");
-        // FIXME migrateProjects();
+        migrateProjects();
         // Migrating ACL
         logger.info("Migrating ACL...");
         migrateACL();
@@ -78,12 +78,12 @@ public class Migration extends NamedParameterJdbcDaoSupport {
     }
 
     private void createUniqueIdGenerators() {
-        // FIXME createUniqueIdGenerator("Project");
-        // FIXME createUniqueIdGenerator("Branch");
-        // FIXME createUniqueIdGenerator("PromotionLevel");
-        // FIXME createUniqueIdGenerator("ValidationStamp");
-        // FIXME createUniqueIdGenerator("Build");
-        // FIXME createUniqueIdGenerator("ValidationRun");
+        createUniqueIdGenerator("Project");
+        createUniqueIdGenerator("Branch");
+        createUniqueIdGenerator("PromotionLevel");
+        createUniqueIdGenerator("ValidationStamp");
+        createUniqueIdGenerator("Build");
+        createUniqueIdGenerator("ValidationRun");
         // ----
         createUniqueIdGenerator("AccountGroup");
         createUniqueIdGenerator("Account");
@@ -329,10 +329,24 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         migrateGlobalGroupPermissions();
         // Global permissions for accounts
         migrateGlobalPermissions();
-        // TODO Project permissions for groups
+        // Project permissions for groups
+        migrateProjectGroupPermissions();
         // TODO Project permissions for accounts
         // LDAP mappings
         migrateGroupMappings();
+    }
+
+    private void migrateProjectGroupPermissions() {
+        h2.getJdbcOperations().query("SELECT * FROM GROUP_PROJECT_AUTHORIZATIONS", (RowCallbackHandler) rs ->
+                template.query(
+                        "MATCH (g: AccountGroup {id: {groupId}}), (p: Project {id: {id}}) " +
+                                "MERGE (g)-[:HAS_ROLE {role: {role}}]->(p)",
+                        ImmutableMap.<String, Object>builder()
+                                .put("id", rs.getInt("PROJECT"))
+                                .put("groupId", rs.getInt("ACCOUNTGROUP"))
+                                .put("role", rs.getString("ROLE"))
+                                .build()
+                ));
     }
 
     private void migrateGlobalGroupPermissions() {
