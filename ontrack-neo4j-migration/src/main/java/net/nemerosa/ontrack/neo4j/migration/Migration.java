@@ -9,6 +9,8 @@ import net.nemerosa.ontrack.model.events.EventFactory;
 import net.nemerosa.ontrack.model.events.EventType;
 import net.nemerosa.ontrack.model.exceptions.ValidationRunStatusNotFoundException;
 import net.nemerosa.ontrack.model.structure.*;
+import net.nemerosa.ontrack.repository.AccountGroupRepository;
+import net.nemerosa.ontrack.repository.AccountRepository;
 import net.nemerosa.ontrack.repository.StructureRepository;
 import org.apache.commons.lang3.reflect.FieldUtils;
 import org.neo4j.ogm.model.Result;
@@ -29,15 +31,21 @@ import java.util.concurrent.ExecutionException;
 @Component
 public class Migration extends NamedParameterJdbcDaoSupport {
 
+    public static final String MIGRATION_USER = "migration";
+
     private final Logger logger = LoggerFactory.getLogger(Migration.class);
 
     private final StructureRepository structure;
+    private final AccountGroupRepository accountGroupRepository;
+    private final AccountRepository accountRepository;
     private final Neo4jOperations template;
 
     @Autowired
-    public Migration(StructureRepository structure, Neo4jOperations template, DataSource dataSource) {
+    public Migration(StructureRepository structure, Neo4jOperations template, DataSource dataSource, AccountGroupRepository accountGroupRepository, AccountRepository accountRepository) {
         this.structure = structure;
         this.template = template;
+        this.accountGroupRepository = accountGroupRepository;
+        this.accountRepository = accountRepository;
         this.setDataSource(dataSource);
     }
 
@@ -49,7 +57,11 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         template.query("MATCH (n) DETACH DELETE n", Collections.emptyMap());
         // Migrating the projects
         logger.info("Migrating projects...");
-        migrateProjects();
+        // TODO Restrict projects to migrate (options)
+        // FIXME migrateProjects();
+        // Migrating ACL
+        logger.info("Migrating ACL...");
+        migrateACL();
         // Creating the counters
         logger.info("Creating unique id generators...");
         createUniqueIdGenerators();
@@ -59,12 +71,14 @@ public class Migration extends NamedParameterJdbcDaoSupport {
     }
 
     private void createUniqueIdGenerators() {
-        createUniqueIdGenerator("Project");
-        createUniqueIdGenerator("Branch");
-        createUniqueIdGenerator("PromotionLevel");
-        createUniqueIdGenerator("ValidationStamp");
-        createUniqueIdGenerator("Build");
-        createUniqueIdGenerator("ValidationRun");
+        // FIXME createUniqueIdGenerator("Project");
+        // FIXME createUniqueIdGenerator("Branch");
+        // FIXME createUniqueIdGenerator("PromotionLevel");
+        // FIXME createUniqueIdGenerator("ValidationStamp");
+        // FIXME createUniqueIdGenerator("Build");
+        // FIXME createUniqueIdGenerator("ValidationRun");
+        // ----
+        createUniqueIdGenerator("AccountGroup");
     }
 
     private void createUniqueIdGenerator(String label) {
@@ -81,6 +95,12 @@ public class Migration extends NamedParameterJdbcDaoSupport {
                         .build()
         );
     }
+
+    /**
+     * ==========================
+     * Structure
+     * ==========================
+     */
 
     private void migrateProjects() {
         // Gets the list of projects
@@ -196,6 +216,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
                         .put("createdBy", signature.getUser().getName())
                         .build()
         );
+        // TODO Build links
         // Promotion runs
         migratePromotionRuns(build);
         // Validation runs & statuses
@@ -276,6 +297,42 @@ public class Migration extends NamedParameterJdbcDaoSupport {
             throw new ValidationRunStatusNotFoundException(name);
         }
     }
+
+    /**
+     * ==========================
+     * ACL
+     * ==========================
+     */
+
+    private void migrateACL() {
+        // Groups
+        migrateGroups();
+        // TODO Accounts
+        // TODO Global permissions for groups
+        // TODO Global permissions for accounts
+        // TODO LDAP mappings
+    }
+
+    private void migrateGroups() {
+        accountGroupRepository.findAll().forEach(accountGroup ->
+                template.query(
+                        "CREATE (g:AccountGroup {id: {id}, name: {name}, description: {description}})",
+                        ImmutableMap.<String, Object>builder()
+                                .put("id", accountGroup.id())
+                                .put("name", accountGroup.getName())
+                                .put("description", accountGroup.getDescription())
+                                .put("createdAt", Time.toJavaUtilDate(Time.now()))
+                                .put("createdBy", MIGRATION_USER)
+                                .build()
+                )
+        );
+    }
+
+    /**
+     * ==========================
+     * Utility methods
+     * ==========================
+     */
 
     private Signature getEventSignature(String entity, EventType eventType, int entityId) {
         String eventUser;
