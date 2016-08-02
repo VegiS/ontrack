@@ -10,7 +10,6 @@ import net.nemerosa.ontrack.model.events.EventType;
 import net.nemerosa.ontrack.model.exceptions.ValidationRunStatusNotFoundException;
 import net.nemerosa.ontrack.model.structure.*;
 import net.nemerosa.ontrack.repository.AccountGroupRepository;
-import net.nemerosa.ontrack.repository.AccountRepository;
 import net.nemerosa.ontrack.repository.StructureRepository;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.reflect.FieldUtils;
@@ -31,6 +30,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
+import java.util.regex.Pattern;
 
 @Component
 public class Migration extends NamedParameterJdbcDaoSupport {
@@ -39,20 +39,22 @@ public class Migration extends NamedParameterJdbcDaoSupport {
 
     private final Logger logger = LoggerFactory.getLogger(Migration.class);
 
+    private final MigrationProperties migrationProperties;
     private final StructureRepository structure;
     private final AccountGroupRepository accountGroupRepository;
-    private final AccountRepository accountRepository;
     private final NamedParameterJdbcOperations h2;
     private final Neo4jOperations template;
+    private final Pattern branchFilter;
 
     @Autowired
-    public Migration(StructureRepository structure, Neo4jOperations template, DataSource dataSource, AccountGroupRepository accountGroupRepository, AccountRepository accountRepository) {
+    public Migration(StructureRepository structure, Neo4jOperations template, DataSource dataSource, MigrationProperties migrationProperties, AccountGroupRepository accountGroupRepository) {
         this.structure = structure;
         this.template = template;
+        this.migrationProperties = migrationProperties;
         this.accountGroupRepository = accountGroupRepository;
-        this.accountRepository = accountRepository;
         this.setDataSource(dataSource);
         h2 = new NamedParameterJdbcTemplate(dataSource);
+        branchFilter = Pattern.compile(migrationProperties.getBranchExpression());
     }
 
     public void run() {
@@ -63,8 +65,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         template.query("MATCH (n) DETACH DELETE n", Collections.emptyMap());
         // Migrating the projects
         logger.info("Migrating projects...");
-        // TODO Restrict projects to migrate (options)
-        // FIXME migrateProjects();
+        migrateProjects();
         // Migrating ACL
         logger.info("Migrating ACL...");
         migrateACL();
@@ -77,12 +78,12 @@ public class Migration extends NamedParameterJdbcDaoSupport {
     }
 
     private void createUniqueIdGenerators() {
-        // FIXME createUniqueIdGenerator("Project");
-        // FIXME createUniqueIdGenerator("Branch");
-        // FIXME createUniqueIdGenerator("PromotionLevel");
-        // FIXME createUniqueIdGenerator("ValidationStamp");
-        // FIXME createUniqueIdGenerator("Build");
-        // FIXME createUniqueIdGenerator("ValidationRun");
+        createUniqueIdGenerator("Project");
+        createUniqueIdGenerator("Branch");
+        createUniqueIdGenerator("PromotionLevel");
+        createUniqueIdGenerator("ValidationStamp");
+        createUniqueIdGenerator("Build");
+        createUniqueIdGenerator("ValidationRun");
         // ----
         createUniqueIdGenerator("AccountGroup");
         createUniqueIdGenerator("Account");
@@ -111,7 +112,10 @@ public class Migration extends NamedParameterJdbcDaoSupport {
 
     private void migrateProjects() {
         // Gets the list of projects
-        structure.getProjectList().forEach(this::migrateProject);
+        structure.getProjectList()
+                .stream()
+                .filter(p -> migrationProperties.includesProject(p.getName()))
+                .forEach(this::migrateProject);
     }
 
     private void migrateProject(Project project) {
@@ -129,7 +133,10 @@ public class Migration extends NamedParameterJdbcDaoSupport {
                         .build()
         );
 
-        structure.getBranchesForProject(project.getId()).forEach(this::migrateBranch);
+        structure.getBranchesForProject(project.getId())
+                .stream()
+                .filter(b -> branchFilter.matcher(b.getName()).matches())
+                .forEach(this::migrateBranch);
     }
 
     private void migrateBranch(Branch branch) {
