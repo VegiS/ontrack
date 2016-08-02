@@ -1,11 +1,16 @@
 package net.nemerosa.ontrack.neo4j.migration;
 
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ImmutableMap;
 import net.nemerosa.ontrack.common.Time;
 import net.nemerosa.ontrack.model.events.EventFactory;
 import net.nemerosa.ontrack.model.events.EventType;
+import net.nemerosa.ontrack.model.exceptions.ValidationRunStatusNotFoundException;
 import net.nemerosa.ontrack.model.structure.*;
 import net.nemerosa.ontrack.repository.StructureRepository;
+import org.apache.commons.lang3.reflect.FieldUtils;
 import org.neo4j.ogm.model.Result;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,6 +24,7 @@ import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
 
 @Component
 public class Migration extends NamedParameterJdbcDaoSupport {
@@ -191,6 +197,8 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         );
         // Promotion runs
         migratePromotionRuns(build);
+        // Validation runs & statuses
+        migrationValidationRuns(build);
         // OK
         return true;
     }
@@ -207,6 +215,65 @@ public class Migration extends NamedParameterJdbcDaoSupport {
                         .put("createdBy", promotionRun.getSignature().getUser().getName())
                         .build()
         ));
+    }
+
+    private void migrationValidationRuns(Build build) {
+        structure.getValidationRunsForBuild(build, this::getCachedValidationRunStatusID).forEach(validationRun -> {
+            // Very first status
+            ValidationRunStatus initial = validationRun.getValidationRunStatuses().get(validationRun.getValidationRunStatuses().size() - 1);
+            // Validation run node
+            template.query(
+                    "MATCH (b:Build {id: {buildId}}),(vs:ValidationStamp {id: {validationStampId}}) " +
+                            "CREATE " +
+                            "   (b)-[:HAS_VALIDATION]->(vr:ValidationRun {id:{validationRunId}, createdAt: {createdAt}, createdBy: {createdAt}})," +
+                            "   (vr)-[:VALIDATION_FOR]->(vs)",
+                    ImmutableMap.<String, Object>builder()
+                            .put("buildId", build.id())
+                            .put("validationStampId", validationRun.getValidationStamp().id())
+                            .put("validationRunId", validationRun.id())
+                            .put("createdAt", Time.toJavaUtilDate(initial.getSignature().getTime()))
+                            .put("createdBy", initial.getSignature().getUser().getName())
+                            .build()
+            );
+            // Validation run statuses
+            for (ValidationRunStatus validationRunStatus : validationRun.getValidationRunStatuses()) {
+                template.query(
+                        "MATCH (vr: ValidationRun {id: {validationRunId}}) " +
+                                "CREATE (vr)-[:HAS_STATUS]->(vrs:ValidationRunStatus {status: {status}, createdAt: {createdAt}, createdBy: {createdAt}, description: {description}})",
+                        ImmutableMap.<String, Object>builder()
+                                .put("validationRunId", validationRun.id())
+                                .put("status", validationRunStatus.getStatusID().getId())
+                                .put("description", validationRunStatus.getDescription())
+                                .put("createdAt", Time.toJavaUtilDate(validationRunStatus.getSignature().getTime()))
+                                .put("createdBy", validationRunStatus.getSignature().getUser().getName())
+                                .build()
+                );
+            }
+        });
+    }
+
+    private final LoadingCache<String, ValidationRunStatusID> cacheValidationRunStatusID =
+            CacheBuilder.newBuilder().build(new CacheLoader<String, ValidationRunStatusID>() {
+                @Override
+                public ValidationRunStatusID load(String key) throws Exception {
+                    return getValidationRunStatusID(key);
+                }
+            });
+
+    private ValidationRunStatusID getValidationRunStatusID(String name) {
+        try {
+            return (ValidationRunStatusID) FieldUtils.readStaticField(ValidationRunStatusID.class, String.format("STATUS_%s", name));
+        } catch (IllegalAccessException e) {
+            throw new ValidationRunStatusNotFoundException(name);
+        }
+    }
+
+    private ValidationRunStatusID getCachedValidationRunStatusID(String name) {
+        try {
+            return cacheValidationRunStatusID.get(name);
+        } catch (ExecutionException e) {
+            throw new ValidationRunStatusNotFoundException(name);
+        }
     }
 
     private Signature getEventSignature(String entity, EventType eventType, int entityId) {
