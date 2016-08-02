@@ -18,10 +18,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.neo4j.template.Neo4jOperations;
+import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcDaoSupport;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import javax.sql.DataSource;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
@@ -38,6 +43,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
     private final StructureRepository structure;
     private final AccountGroupRepository accountGroupRepository;
     private final AccountRepository accountRepository;
+    private final NamedParameterJdbcOperations h2;
     private final Neo4jOperations template;
 
     @Autowired
@@ -47,6 +53,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         this.accountGroupRepository = accountGroupRepository;
         this.accountRepository = accountRepository;
         this.setDataSource(dataSource);
+        h2 = new NamedParameterJdbcTemplate(dataSource);
     }
 
     public void run() {
@@ -307,10 +314,31 @@ public class Migration extends NamedParameterJdbcDaoSupport {
     private void migrateACL() {
         // Groups
         migrateGroups();
-        // TODO Accounts
+        // Accounts
+        migrateAccounts();
+        // TODO Account groups
         // TODO Global permissions for groups
         // TODO Global permissions for accounts
         // TODO LDAP mappings
+    }
+
+    private void migrateAccounts() {
+        h2.getJdbcOperations().query("SELECT * FROM ACCOUNTS", (RowCallbackHandler) rs -> {
+            template.query(
+                    "CREATE (a:Account {id: {id}, name: {name}, fullName: {fullName}, email: {email}, mode: {mode}, password: {password}, role: {role}, createdAt: {createdAt}, createdBy: {createdBy}})",
+                    ImmutableMap.<String, Object>builder()
+                            .put("id", rs.getInt("ID"))
+                            .put("name", rs.getString("NAME"))
+                            .put("fullName", rs.getString("FULLNAME"))
+                            .put("email", rs.getString("EMAIL"))
+                            .put("mode", rs.getString("MODE"))
+                            .put("password", rs.getString("PASSWORD"))
+                            .put("role", rs.getString("ROLE"))
+                            .put("createdAt", Time.toJavaUtilDate(Time.now()))
+                            .put("createdBy", MIGRATION_USER)
+                            .build()
+            );
+        });
     }
 
     private void migrateGroups() {
