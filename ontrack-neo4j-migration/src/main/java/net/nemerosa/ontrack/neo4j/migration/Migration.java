@@ -67,6 +67,9 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         // Migrating the projects
         logger.info("Migrating projects...");
         migrateProjects();
+        // Build links
+        logger.info("Migration build links...");
+        migrateBuildLinks();
         // Migrating ACL
         logger.info("Migrating ACL...");
         migrateACL();
@@ -243,13 +246,26 @@ public class Migration extends NamedParameterJdbcDaoSupport {
                         .put("createdBy", signature.getUser().getName())
                         .build()
         );
-        // TODO Build links
         // Promotion runs
         migratePromotionRuns(build);
         // Validation runs & statuses
         migrationValidationRuns(build);
         // OK
         return true;
+    }
+
+    private void migrateBuildLinks() {
+        // Build links
+        // TODO Remove self links
+        h2.getJdbcOperations().query("SELECT * FROM BUILD_LINKS", (RowCallbackHandler) rs ->
+                template.query(
+                        "MATCH (a: Build {id: {sourceId}}), (b: Build {id: {targetId}}) " +
+                                "MERGE (a)-[:LINKED_TO]->(b)",
+                        ImmutableMap.<String, Object>builder()
+                                .put("sourceId", rs.getInt("BUILDID"))
+                                .put("targetId", rs.getInt("TARGETBUILDID"))
+                                .build()
+                ));
     }
 
     private void migratePromotionRuns(Build build) {
