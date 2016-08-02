@@ -64,6 +64,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         createUniqueIdGenerator("PromotionLevel");
         createUniqueIdGenerator("ValidationStamp");
         createUniqueIdGenerator("Build");
+        createUniqueIdGenerator("ValidationRun");
     }
 
     private void createUniqueIdGenerator(String label) {
