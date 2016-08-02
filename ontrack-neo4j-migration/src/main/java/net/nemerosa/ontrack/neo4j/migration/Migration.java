@@ -58,6 +58,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
     }
 
     public void run() {
+        // TODO Do not use repository classes
         logger.info("Starting migration...");
         long start = System.currentTimeMillis();
         // Deleting all nodes
@@ -69,6 +70,18 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         // Migrating ACL
         logger.info("Migrating ACL...");
         migrateACL();
+        // TODO Entity data
+        // TODO Configurations
+        // TODO Properties
+        // TODO Build filters
+        // TODO Shared build filters
+        // TODO Branch templates
+        // TODO Events
+        // TODO Predefined promotion levels
+        // TODO Predefined validation stamps
+        // TODO Project favourites
+        // TODO Settings
+        // TODO Storage
         // Creating the counters
         logger.info("Creating unique id generators...");
         createUniqueIdGenerators();
