@@ -331,7 +331,8 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         migrateGlobalPermissions();
         // Project permissions for groups
         migrateProjectGroupPermissions();
-        // TODO Project permissions for accounts
+        // Project permissions for accounts
+        migrateProjectPermissions();
         // LDAP mappings
         migrateGroupMappings();
     }
@@ -369,6 +370,19 @@ public class Migration extends NamedParameterJdbcDaoSupport {
                                 "MERGE (r: GlobalRole {name: {role}}) " +
                                 "MERGE (a)-[:HAS_ROLE]->(r)",
                         ImmutableMap.<String, Object>builder()
+                                .put("accountId", rs.getInt("ACCOUNT"))
+                                .put("role", rs.getString("ROLE"))
+                                .build()
+                ));
+    }
+
+    private void migrateProjectPermissions() {
+        h2.getJdbcOperations().query("SELECT * FROM PROJECT_AUTHORIZATIONS", (RowCallbackHandler) rs ->
+                template.query(
+                        "MATCH (a: Account {id: {accountId}}), (p: Project {id: {id}}) " +
+                                "MERGE (a)-[:HAS_ROLE {role: {role}}]->(p)",
+                        ImmutableMap.<String, Object>builder()
+                                .put("id", rs.getInt("PROJECT"))
                                 .put("accountId", rs.getInt("ACCOUNT"))
                                 .put("role", rs.getString("ROLE"))
                                 .build()
