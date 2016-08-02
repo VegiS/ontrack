@@ -327,7 +327,8 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         migrateAccountGroupLinks();
         // Global permissions for groups
         migrateGlobalGroupPermissions();
-        // TODO Global permissions for accounts
+        // Global permissions for accounts
+        migrateGlobalPermissions();
         // TODO Project permissions for groups
         // TODO Project permissions for accounts
         // LDAP mappings
@@ -342,6 +343,19 @@ public class Migration extends NamedParameterJdbcDaoSupport {
                                 "MERGE (g)-[:HAS_ROLE]->(r)",
                         ImmutableMap.<String, Object>builder()
                                 .put("groupId", rs.getInt("ACCOUNTGROUP"))
+                                .put("role", rs.getString("ROLE"))
+                                .build()
+                ));
+    }
+
+    private void migrateGlobalPermissions() {
+        h2.getJdbcOperations().query("SELECT * FROM GLOBAL_AUTHORIZATIONS", (RowCallbackHandler) rs ->
+                template.query(
+                        "MATCH (a: Account {id: {accountId}}) " +
+                                "MERGE (r: GlobalRole {name: {role}}) " +
+                                "MERGE (a)-[:HAS_ROLE]->(r)",
+                        ImmutableMap.<String, Object>builder()
+                                .put("accountId", rs.getInt("ACCOUNT"))
                                 .put("role", rs.getString("ROLE"))
                                 .build()
                 ));
