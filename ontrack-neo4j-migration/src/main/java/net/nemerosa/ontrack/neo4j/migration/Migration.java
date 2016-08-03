@@ -65,9 +65,16 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         // Migrating the projects
         logger.info("Migrating projects...");
         migrateProjects();
+        // TODO Migrating the branches
+        // TODO Migrating the promotion levels
+        // TODO Migrating the validation stamps
+        // TODO Migrating the builds
+        // TODO Migrating the build links
+//        logger.info("Migration build links...");
+//        migrateBuildLinks();
+        // TODO Migrating the promotion runs
+        // TODO Migrating the validation runs
         // Build links
-        logger.info("Migration build links...");
-        migrateBuildLinks();
         // Migrating ACL
         logger.info("Migrating ACL...");
         migrateACL();
@@ -93,11 +100,11 @@ public class Migration extends NamedParameterJdbcDaoSupport {
 
     private void createUniqueIdGenerators() {
         createUniqueIdGenerator("Project");
-        createUniqueIdGenerator("Branch");
-        createUniqueIdGenerator("PromotionLevel");
-        createUniqueIdGenerator("ValidationStamp");
-        createUniqueIdGenerator("Build");
-        createUniqueIdGenerator("ValidationRun");
+        // FIXME createUniqueIdGenerator("Branch");
+        // FIXME createUniqueIdGenerator("PromotionLevel");
+        // FIXME createUniqueIdGenerator("ValidationStamp");
+        // FIXME createUniqueIdGenerator("Build");
+        // FIXME createUniqueIdGenerator("ValidationRun");
         // ----
         createUniqueIdGenerator("AccountGroup");
         createUniqueIdGenerator("Account");
@@ -125,32 +132,23 @@ public class Migration extends NamedParameterJdbcDaoSupport {
      */
 
     private void migrateProjects() {
-        // Gets the list of projects
-        structure.getProjectList()
-                .stream()
-                .filter(p -> migrationProperties.includesProject(p.getName()))
-                .forEach(this::migrateProject);
-    }
-
-    private void migrateProject(Project project) {
-        logger.info("Migrating project {}...", project.getName());
-
-        Signature signature = getEventSignature("project", EventFactory.NEW_PROJECT, project.id());
-        template.query(
-                "CREATE (p:Project {id: {id}, name: {name}, description: {description}, createdAt: {createdAt}, createdBy: {createdBy}})",
-                ImmutableMap.<String, Object>builder()
-                        .put("id", project.id())
-                        .put("name", project.getName())
-                        .put("description", safeString(project.getDescription()))
-                        .put("createdAt", Time.toJavaUtilDate(signature.getTime()))
-                        .put("createdBy", signature.getUser().getName())
-                        .build()
+        getNamedParameterJdbcTemplate().getJdbcOperations().query(
+                "SELECT * FROM PROJECTS",
+                (RowCallbackHandler) rs -> {
+                    int projectId = rs.getInt("ID");
+                    Signature signature = getEventSignature("project", EventFactory.NEW_PROJECT, projectId);
+                    template.query(
+                            "CREATE (p:Project {id: {id}, name: {name}, description: {description}, createdAt: {createdAt}, createdBy: {createdBy}})",
+                            ImmutableMap.<String, Object>builder()
+                                    .put("id", projectId)
+                                    .put("name", rs.getString("NAME"))
+                                    .put("description", safeString(rs.getString("DESCRIPTION")))
+                                    .put("createdAt", Time.toJavaUtilDate(signature.getTime()))
+                                    .put("createdBy", signature.getUser().getName())
+                                    .build()
+                    );
+                }
         );
-
-        structure.getBranchesForProject(project.getId())
-                .stream()
-                .filter(b -> branchFilter.matcher(b.getName()).matches())
-                .forEach(this::migrateBranch);
     }
 
     private void migrateBranch(Branch branch) {
