@@ -38,7 +38,9 @@ public class Migration extends NamedParameterJdbcDaoSupport {
     private final Logger logger = LoggerFactory.getLogger(Migration.class);
 
     private final MigrationProperties migrationProperties;
+    @Deprecated
     private final StructureRepository structure;
+    @Deprecated
     private final AccountGroupRepository accountGroupRepository;
     private final Neo4jOperations template;
     private final Pattern branchFilter;
