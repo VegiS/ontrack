@@ -72,7 +72,9 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         // Migrating the promotion levels
         logger.info("Migrating promotion levels...");
         migratePromotionLevels();
-        // TODO Migrating the validation stamps
+        // Migrating the validation stamps
+        logger.info("Migrating validation stamps...");
+        migrateValidationStamps();
         // TODO Migrating the builds
         // TODO Migrating the build links
 //        logger.info("Migration build links...");
@@ -106,8 +108,8 @@ public class Migration extends NamedParameterJdbcDaoSupport {
     private void createUniqueIdGenerators() {
         createUniqueIdGenerator("Project");
         createUniqueIdGenerator("Branch");
-        // FIXME createUniqueIdGenerator("PromotionLevel");
-        // FIXME createUniqueIdGenerator("ValidationStamp");
+        createUniqueIdGenerator("PromotionLevel");
+        createUniqueIdGenerator("ValidationStamp");
         // FIXME createUniqueIdGenerator("Build");
         // FIXME createUniqueIdGenerator("ValidationRun");
         // ----
@@ -211,24 +213,30 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         );
     }
 
-    private void migrateValidationStamp(ValidationStamp validationStamp, int orderNb) {
-        logger.info("Migrating validation stamp {}:{}:{}...", validationStamp.getProject().getName(), validationStamp.getBranch().getName(), validationStamp.getName());
-        Signature signature = getEventSignature("validation_stamp", EventFactory.NEW_VALIDATION_STAMP, validationStamp.id());
-        template.query(
-                "MATCH (b:Branch {id: {branchId}}) " +
-                        "CREATE (vs:ValidationStamp {id: {id}, name: {name}, description: {description}, createdAt: {createdAt}, createdBy: {createdBy}, orderNb: {orderNb}})" +
-                        "-[:VALIDATION_STAMP_OF]->(b)",
-                ImmutableMap.<String, Object>builder()
-                        .put("id", validationStamp.id())
-                        .put("branchId", validationStamp.getBranch().id())
-                        .put("name", validationStamp.getName())
-                        .put("description", safeString(validationStamp.getDescription()))
-                        .put("createdAt", Time.toJavaUtilDate(signature.getTime()))
-                        .put("createdBy", signature.getUser().getName())
-                        .put("orderNb", orderNb)
-                        // TODO Image type
-                        // TODO Image bytes - in a separate file
-                        .build()
+    @SuppressWarnings("RedundantCast")
+    private void migrateValidationStamps() {
+        jdbc().query(
+                "SELECT * FROM VALIDATION_STAMPS",
+                (RowCallbackHandler) rs -> {
+                    int validationStampId = rs.getInt("ID");
+                    Signature signature = getEventSignature("validation_stamp", EventFactory.NEW_VALIDATION_STAMP, validationStampId);
+                    template.query(
+                            "MATCH (b:Branch {id: {branchId}}) " +
+                                    "CREATE (vs:ValidationStamp {id: {id}, name: {name}, description: {description}, createdAt: {createdAt}, createdBy: {createdBy}, orderNb: {orderNb}})" +
+                                    "-[:VALIDATION_STAMP_OF]->(b)",
+                            ImmutableMap.<String, Object>builder()
+                                    .put("id", validationStampId)
+                                    .put("branchId", rs.getInt("BRANCHID"))
+                                    .put("name", rs.getString("NAME"))
+                                    .put("description", safeString(rs.getString("DESCRIPTION")))
+                                    .put("createdAt", Time.toJavaUtilDate(signature.getTime()))
+                                    .put("createdBy", signature.getUser().getName())
+                                    .put("orderNb", rs.getInt("ORDERNB"))
+                                    // TODO Image type
+                                    // TODO Image bytes - in a separate file
+                                    .build()
+                    );
+                }
         );
     }
 
