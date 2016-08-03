@@ -5,7 +5,6 @@ import net.nemerosa.ontrack.common.Time;
 import net.nemerosa.ontrack.model.events.EventFactory;
 import net.nemerosa.ontrack.model.events.EventType;
 import net.nemerosa.ontrack.model.structure.Signature;
-import net.nemerosa.ontrack.repository.AccountGroupRepository;
 import org.apache.commons.lang3.StringUtils;
 import org.neo4j.ogm.model.Result;
 import org.slf4j.Logger;
@@ -32,15 +31,12 @@ public class Migration extends NamedParameterJdbcDaoSupport {
     private final Logger logger = LoggerFactory.getLogger(Migration.class);
 
     private final MigrationProperties migrationProperties;
-    @Deprecated
-    private final AccountGroupRepository accountGroupRepository;
     private final Neo4jOperations template;
 
     @Autowired
-    public Migration(Neo4jOperations template, DataSource dataSource, MigrationProperties migrationProperties, AccountGroupRepository accountGroupRepository) {
+    public Migration(Neo4jOperations template, DataSource dataSource, MigrationProperties migrationProperties) {
         this.template = template;
         this.migrationProperties = migrationProperties;
-        this.accountGroupRepository = accountGroupRepository;
         this.setDataSource(dataSource);
     }
 
@@ -490,13 +486,14 @@ public class Migration extends NamedParameterJdbcDaoSupport {
     }
 
     private void migrateGroups() {
-        accountGroupRepository.findAll().forEach(accountGroup ->
-                template.query(
+        jdbc().query(
+                "SELECT * FROM ACCOUNT_GROUPS ORDER BY ID DESC",
+                (RowCallbackHandler) rs -> template.query(
                         "CREATE (g:AccountGroup {id: {id}, name: {name}, description: {description}})",
                         ImmutableMap.<String, Object>builder()
-                                .put("id", accountGroup.id())
-                                .put("name", accountGroup.getName())
-                                .put("description", accountGroup.getDescription())
+                                .put("id", rs.getInt("ID"))
+                                .put("name", rs.getString("NAME"))
+                                .put("description", safeString(rs.getString("DESCRIPTION")))
                                 .put("createdAt", Time.toJavaUtilDate(Time.now()))
                                 .put("createdBy", MIGRATION_USER)
                                 .build()
