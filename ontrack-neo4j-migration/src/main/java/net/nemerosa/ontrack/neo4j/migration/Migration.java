@@ -247,13 +247,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
     @SuppressWarnings("RedundantCast")
     private int migrateBuilds() {
         AtomicInteger count = new AtomicInteger();
-        String limit;
-        if (migrationProperties.getBuildCount() >= 0) {
-            logger.warn("Limiting the number of builds to {}", migrationProperties.getBuildCount());
-            limit = "LIMIT " + migrationProperties.getBuildCount();
-        } else {
-            limit = "";
-        }
+        String limit = getLimit("builds", migrationProperties.getBuildCount());
         jdbc().query(
                 String.format(
                         "SELECT * FROM BUILDS ORDER BY ID ASC %s",
@@ -283,17 +277,19 @@ public class Migration extends NamedParameterJdbcDaoSupport {
     private int migrateBuildLinks() {
         // Build links
         AtomicInteger count = new AtomicInteger();
-        jdbc().query("SELECT * FROM BUILD_LINKS", (RowCallbackHandler) rs -> {
-            count.incrementAndGet();
-            template.query(
-                    "MATCH (a: Build {id: {sourceId}}), (b: Build {id: {targetId}}) " +
-                            "MERGE (a)-[:LINKED_TO]->(b)",
-                    ImmutableMap.<String, Object>builder()
-                            .put("sourceId", rs.getInt("BUILDID"))
-                            .put("targetId", rs.getInt("TARGETBUILDID"))
-                            .build()
-            );
-        });
+        jdbc().query(
+                "SELECT * FROM BUILD_LINKS " + getLimit("build links", migrationProperties.getBuildLinkCount()),
+                (RowCallbackHandler) rs -> {
+                    count.incrementAndGet();
+                    template.query(
+                            "MATCH (a: Build {id: {sourceId}}), (b: Build {id: {targetId}}) " +
+                                    "MERGE (a)-[:LINKED_TO]->(b)",
+                            ImmutableMap.<String, Object>builder()
+                                    .put("sourceId", rs.getInt("BUILDID"))
+                                    .put("targetId", rs.getInt("TARGETBUILDID"))
+                                    .build()
+                    );
+                });
         // Remove self links
         template.query(
                 "MATCH (b:Build)-[r:LINKED_TO]->(b) DELETE r",
@@ -307,7 +303,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
     private int migratePromotionRuns() {
         AtomicInteger count = new AtomicInteger();
         jdbc().query(
-                "SELECT * FROM PROMOTION_RUNS ORDER BY ID ASC",
+                "SELECT * FROM PROMOTION_RUNS ORDER BY ID ASC " + getLimit("promotion runs", migrationProperties.getPromotionRunCount()),
                 (RowCallbackHandler) rs -> {
                     count.incrementAndGet();
                     template.query(
@@ -330,7 +326,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
     private int migrateValidationRuns() {
         AtomicInteger count = new AtomicInteger();
         jdbc().query(
-                "SELECT * FROM VALIDATION_RUNS ORDER BY ID ASC",
+                "SELECT * FROM VALIDATION_RUNS ORDER BY ID ASC " + getLimit("validation runs", migrationProperties.getValidationRunCount()),
                 (RowCallbackHandler) rs -> {
                     count.incrementAndGet();
                     int runId = rs.getInt("ID");
@@ -513,6 +509,17 @@ public class Migration extends NamedParameterJdbcDaoSupport {
      * Utility methods
      * ==========================
      */
+
+    private String getLimit(String name, int count) {
+        String limit;
+        if (count >= 0) {
+            logger.warn("Limiting the number of {} to {}", name, count);
+            limit = "LIMIT " + count;
+        } else {
+            limit = "";
+        }
+        return limit;
+    }
 
     private Signature getEventSignature(String entity, EventType eventType, int entityId) {
         String eventUser;

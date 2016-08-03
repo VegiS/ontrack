@@ -14,4 +14,19 @@ public class MigrationProperties {
      */
     private int buildCount = -1;
 
+    /**
+     * Limit for the number of build links being important (-1 for no limit)
+     */
+    private int buildLinkCount = -1;
+
+    /**
+     * Limit for the number of promotion runs being important (-1 for no limit)
+     */
+    private int promotionRunCount = -1;
+
+    /**
+     * Limit for the number of validation runs being important (-1 for no limit)
+     */
+    private int validationRunCount = -1;
+
 }
