@@ -8,7 +8,10 @@ import net.nemerosa.ontrack.common.Time;
 import net.nemerosa.ontrack.model.events.EventFactory;
 import net.nemerosa.ontrack.model.events.EventType;
 import net.nemerosa.ontrack.model.exceptions.ValidationRunStatusNotFoundException;
-import net.nemerosa.ontrack.model.structure.*;
+import net.nemerosa.ontrack.model.structure.Build;
+import net.nemerosa.ontrack.model.structure.Signature;
+import net.nemerosa.ontrack.model.structure.ValidationRunStatus;
+import net.nemerosa.ontrack.model.structure.ValidationRunStatusID;
 import net.nemerosa.ontrack.repository.AccountGroupRepository;
 import net.nemerosa.ontrack.repository.StructureRepository;
 import org.apache.commons.lang3.StringUtils;
@@ -29,7 +32,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
-import java.util.regex.Pattern;
 
 @Component
 public class Migration extends NamedParameterJdbcDaoSupport {
@@ -44,7 +46,6 @@ public class Migration extends NamedParameterJdbcDaoSupport {
     @Deprecated
     private final AccountGroupRepository accountGroupRepository;
     private final Neo4jOperations template;
-    private final Pattern branchFilter;
 
     @Autowired
     public Migration(StructureRepository structure, Neo4jOperations template, DataSource dataSource, MigrationProperties migrationProperties, AccountGroupRepository accountGroupRepository) {
@@ -53,7 +54,6 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         this.migrationProperties = migrationProperties;
         this.accountGroupRepository = accountGroupRepository;
         this.setDataSource(dataSource);
-        branchFilter = Pattern.compile(migrationProperties.getBranchExpression());
     }
 
     public void run() {
@@ -75,7 +75,9 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         // Migrating the validation stamps
         logger.info("Migrating validation stamps...");
         migrateValidationStamps();
-        // TODO Migrating the builds
+        // Migrating the builds
+        logger.info("Migrating builds...");
+        migrateBuilds();
         // TODO Migrating the build links
 //        logger.info("Migration build links...");
 //        migrateBuildLinks();
@@ -240,28 +242,34 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         );
     }
 
-    private boolean migrateBuild(Build build) {
-        logger.info("Migrating build {}:{}:{}...", build.getProject().getName(), build.getBranch().getName(), build.getName());
-        Signature signature = build.getSignature();
-        template.query(
-                "MATCH (b:Branch {id: {branchId}}) " +
-                        "CREATE (r:Build {id: {id}, name: {name}, description: {description}, createdAt: {createdAt}, createdBy: {createdBy}})" +
-                        "-[:BUILD_OF]->(b)",
-                ImmutableMap.<String, Object>builder()
-                        .put("id", build.id())
-                        .put("branchId", build.getBranch().id())
-                        .put("name", build.getName())
-                        .put("description", safeString(build.getDescription()))
-                        .put("createdAt", Time.toJavaUtilDate(signature.getTime()))
-                        .put("createdBy", signature.getUser().getName())
-                        .build()
+    private void migrateBuilds() {
+        String limit;
+        if (migrationProperties.getBuildCount() >= 0) {
+            logger.warn("Limiting the number of builds to {}", migrationProperties.getBuildCount());
+            limit = "LIMIT " + migrationProperties.getBuildCount();
+        }
+        else {
+            limit = "";
+        }
+        jdbc().query(
+                String.format(
+                        "SELECT * FROM BUILDS ORDER BY ID ASC %s",
+                        limit
+                ),
+                (RowCallbackHandler) rs -> template.query(
+                        "MATCH (b:Branch {id: {branchId}}) " +
+                                "CREATE (r:Build {id: {id}, name: {name}, description: {description}, createdAt: {createdAt}, createdBy: {createdBy}})" +
+                                "-[:BUILD_OF]->(b)",
+                        ImmutableMap.<String, Object>builder()
+                                .put("id", rs.getInt("ID"))
+                                .put("branchId", rs.getInt("BRANCHID"))
+                                .put("name", rs.getString("NAME"))
+                                .put("description", safeString(rs.getString("DESCRIPTION")))
+                                .put("createdAt", Time.toJavaUtilDate(Time.fromStorage(rs.getString("CREATION"))))
+                                .put("createdBy", rs.getString("CREATOR"))
+                                .build()
+                )
         );
-        // Promotion runs
-        migratePromotionRuns(build);
-        // Validation runs & statuses
-        migrationValidationRuns(build);
-        // OK
-        return true;
     }
 
     private void migrateBuildLinks() {
