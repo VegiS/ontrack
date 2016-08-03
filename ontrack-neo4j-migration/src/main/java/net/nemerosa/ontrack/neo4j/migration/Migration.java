@@ -69,7 +69,9 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         // Migrating the branches
         logger.info("Migrating branches...");
         migrateBranches();
-        // TODO Migrating the promotion levels
+        // Migrating the promotion levels
+        logger.info("Migrating promotion levels...");
+        migratePromotionLevels();
         // TODO Migrating the validation stamps
         // TODO Migrating the builds
         // TODO Migrating the build links
@@ -182,24 +184,30 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         );
     }
 
-    private void migratePromotionLevel(PromotionLevel promotionLevel, int orderNb) {
-        logger.info("Migrating promotion level {}:{}:{}...", promotionLevel.getProject().getName(), promotionLevel.getBranch().getName(), promotionLevel.getName());
-        Signature signature = getEventSignature("promotion_level", EventFactory.NEW_PROMOTION_LEVEL, promotionLevel.id());
-        template.query(
-                "MATCH (b:Branch {id: {branchId}}) " +
-                        "CREATE (pl:PromotionLevel {id: {id}, name: {name}, description: {description}, createdAt: {createdAt}, createdBy: {createdBy}, orderNb: {orderNb}})" +
-                        "-[:PROMOTION_LEVEL_OF]->(b)",
-                ImmutableMap.<String, Object>builder()
-                        .put("id", promotionLevel.id())
-                        .put("branchId", promotionLevel.getBranch().id())
-                        .put("name", promotionLevel.getName())
-                        .put("description", safeString(promotionLevel.getDescription()))
-                        .put("createdAt", Time.toJavaUtilDate(signature.getTime()))
-                        .put("createdBy", signature.getUser().getName())
-                        .put("orderNb", orderNb)
-                        // TODO Image type
-                        // TODO Image bytes - in a separate file
-                        .build()
+    @SuppressWarnings("RedundantCast")
+    private void migratePromotionLevels() {
+        jdbc().query(
+                "SELECT * FROM PROMOTION_LEVELS",
+                (RowCallbackHandler) rs -> {
+                    int promotionLevelId = rs.getInt("ID");
+                    Signature signature = getEventSignature("promotion_level", EventFactory.NEW_PROMOTION_LEVEL, promotionLevelId);
+                    template.query(
+                            "MATCH (b:Branch {id: {branchId}}) " +
+                                    "CREATE (pl:PromotionLevel {id: {id}, name: {name}, description: {description}, createdAt: {createdAt}, createdBy: {createdBy}, orderNb: {orderNb}})" +
+                                    "-[:PROMOTION_LEVEL_OF]->(b)",
+                            ImmutableMap.<String, Object>builder()
+                                    .put("id", promotionLevelId)
+                                    .put("branchId", rs.getInt("BRANCHID"))
+                                    .put("name", rs.getString("NAME"))
+                                    .put("description", safeString(rs.getString("DESCRIPTION")))
+                                    .put("createdAt", Time.toJavaUtilDate(signature.getTime()))
+                                    .put("createdBy", signature.getUser().getName())
+                                    .put("orderNb", rs.getInt("ORDERNB"))
+                                    // TODO Image type
+                                    // TODO Image bytes - in a separate file
+                                    .build()
+                    );
+                }
         );
     }
 
