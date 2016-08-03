@@ -250,7 +250,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         String limit = getLimit("builds", migrationProperties.getBuildCount());
         jdbc().query(
                 String.format(
-                        "SELECT * FROM BUILDS ORDER BY ID ASC %s",
+                        "SELECT * FROM BUILDS ORDER BY ID DESC %s",
                         limit
                 ),
                 (RowCallbackHandler) rs -> {
@@ -278,7 +278,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         // Build links
         AtomicInteger count = new AtomicInteger();
         jdbc().query(
-                "SELECT * FROM BUILD_LINKS " + getLimit("build links", migrationProperties.getBuildLinkCount()),
+                "SELECT * FROM BUILD_LINKS ORDER BY ID DESC " + getLimit("build links", migrationProperties.getBuildLinkCount()),
                 (RowCallbackHandler) rs -> {
                     count.incrementAndGet();
                     template.query(
@@ -303,7 +303,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
     private int migratePromotionRuns() {
         AtomicInteger count = new AtomicInteger();
         jdbc().query(
-                "SELECT * FROM PROMOTION_RUNS ORDER BY ID ASC " + getLimit("promotion runs", migrationProperties.getPromotionRunCount()),
+                "SELECT * FROM PROMOTION_RUNS ORDER BY ID DESC " + getLimit("promotion runs", migrationProperties.getPromotionRunCount()),
                 (RowCallbackHandler) rs -> {
                     count.incrementAndGet();
                     template.query(
@@ -326,13 +326,13 @@ public class Migration extends NamedParameterJdbcDaoSupport {
     private int migrateValidationRuns() {
         AtomicInteger count = new AtomicInteger();
         jdbc().query(
-                "SELECT * FROM VALIDATION_RUNS ORDER BY ID ASC " + getLimit("validation runs", migrationProperties.getValidationRunCount()),
+                "SELECT * FROM VALIDATION_RUNS ORDER BY ID DESC " + getLimit("validation runs", migrationProperties.getValidationRunCount()),
                 (RowCallbackHandler) rs -> {
                     count.incrementAndGet();
                     int runId = rs.getInt("ID");
                     // Validation run statuses
                     List<Map<String, Object>> statuses = getNamedParameterJdbcTemplate().queryForList(
-                            "SELECT * FROM VALIDATION_RUN_STATUSES WHERE VALIDATIONRUNID = :runId ORDER BY ID ASC",
+                            "SELECT * FROM VALIDATION_RUN_STATUSES WHERE VALIDATIONRUNID = :runId ORDER BY ID DESC",
                             Collections.singletonMap("runId", runId)
                     );
                     // Initial status
