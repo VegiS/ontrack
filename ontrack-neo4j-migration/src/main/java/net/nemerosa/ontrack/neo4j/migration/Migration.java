@@ -20,8 +20,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.neo4j.template.Neo4jOperations;
 import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcDaoSupport;
-import org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations;
-import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import javax.sql.DataSource;
@@ -42,7 +40,6 @@ public class Migration extends NamedParameterJdbcDaoSupport {
     private final MigrationProperties migrationProperties;
     private final StructureRepository structure;
     private final AccountGroupRepository accountGroupRepository;
-    private final NamedParameterJdbcOperations h2;
     private final Neo4jOperations template;
     private final Pattern branchFilter;
 
@@ -53,7 +50,6 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         this.migrationProperties = migrationProperties;
         this.accountGroupRepository = accountGroupRepository;
         this.setDataSource(dataSource);
-        h2 = new NamedParameterJdbcTemplate(dataSource);
         branchFilter = Pattern.compile(migrationProperties.getBranchExpression());
     }
 
@@ -256,7 +252,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
 
     private void migrateBuildLinks() {
         // Build links
-        h2.getJdbcOperations().query("SELECT * FROM BUILD_LINKS", (RowCallbackHandler) rs ->
+        getNamedParameterJdbcTemplate().getJdbcOperations().query("SELECT * FROM BUILD_LINKS", (RowCallbackHandler) rs ->
                 template.query(
                         "MATCH (a: Build {id: {sourceId}}), (b: Build {id: {targetId}}) " +
                                 "MERGE (a)-[:LINKED_TO]->(b)",
@@ -371,7 +367,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
     }
 
     private void migrateProjectGroupPermissions() {
-        h2.getJdbcOperations().query("SELECT * FROM GROUP_PROJECT_AUTHORIZATIONS", (RowCallbackHandler) rs ->
+        getNamedParameterJdbcTemplate().getJdbcOperations().query("SELECT * FROM GROUP_PROJECT_AUTHORIZATIONS", (RowCallbackHandler) rs ->
                 template.query(
                         "MATCH (g: AccountGroup {id: {groupId}}), (p: Project {id: {id}}) " +
                                 "MERGE (g)-[:HAS_ROLE {role: {role}}]->(p)",
@@ -384,7 +380,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
     }
 
     private void migrateGlobalGroupPermissions() {
-        h2.getJdbcOperations().query("SELECT * FROM GROUP_GLOBAL_AUTHORIZATIONS", (RowCallbackHandler) rs ->
+        getNamedParameterJdbcTemplate().getJdbcOperations().query("SELECT * FROM GROUP_GLOBAL_AUTHORIZATIONS", (RowCallbackHandler) rs ->
                 template.query(
                         "MATCH (g: AccountGroup {id: {groupId}}) " +
                                 "MERGE (r: GlobalRole {name: {role}}) " +
@@ -397,7 +393,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
     }
 
     private void migrateGlobalPermissions() {
-        h2.getJdbcOperations().query("SELECT * FROM GLOBAL_AUTHORIZATIONS", (RowCallbackHandler) rs ->
+        getNamedParameterJdbcTemplate().getJdbcOperations().query("SELECT * FROM GLOBAL_AUTHORIZATIONS", (RowCallbackHandler) rs ->
                 template.query(
                         "MATCH (a: Account {id: {accountId}}) " +
                                 "MERGE (r: GlobalRole {name: {role}}) " +
@@ -410,7 +406,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
     }
 
     private void migrateProjectPermissions() {
-        h2.getJdbcOperations().query("SELECT * FROM PROJECT_AUTHORIZATIONS", (RowCallbackHandler) rs ->
+        getNamedParameterJdbcTemplate().getJdbcOperations().query("SELECT * FROM PROJECT_AUTHORIZATIONS", (RowCallbackHandler) rs ->
                 template.query(
                         "MATCH (a: Account {id: {accountId}}), (p: Project {id: {id}}) " +
                                 "MERGE (a)-[:HAS_ROLE {role: {role}}]->(p)",
@@ -423,7 +419,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
     }
 
     private void migrateGroupMappings() {
-        h2.getJdbcOperations().query("SELECT * FROM ACCOUNT_GROUP_MAPPING", (RowCallbackHandler) rs -> template.query(
+        getNamedParameterJdbcTemplate().getJdbcOperations().query("SELECT * FROM ACCOUNT_GROUP_MAPPING", (RowCallbackHandler) rs -> template.query(
                 String.format(
                         "MATCH (g: AccountGroup {id: {groupId}}) " +
                                 "CREATE (m:%sMapping {name: {name}})-[:MAPS_TO]->(g)",
@@ -437,7 +433,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
     }
 
     private void migrateAccountGroupLinks() {
-        h2.getJdbcOperations().query("SELECT * FROM ACCOUNT_GROUP_LINK", (RowCallbackHandler) rs -> template.query(
+        getNamedParameterJdbcTemplate().getJdbcOperations().query("SELECT * FROM ACCOUNT_GROUP_LINK", (RowCallbackHandler) rs -> template.query(
                 "MATCH (a: Account {id: {accountId}}), (g: AccountGroup {id: {groupId}}) " +
                         "CREATE (a)-[:BELONGS_TO]->(g)",
                 ImmutableMap.<String, Object>builder()
@@ -448,7 +444,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
     }
 
     private void migrateAccounts() {
-        h2.getJdbcOperations().query("SELECT * FROM ACCOUNTS", (RowCallbackHandler) rs -> template.query(
+        getNamedParameterJdbcTemplate().getJdbcOperations().query("SELECT * FROM ACCOUNTS", (RowCallbackHandler) rs -> template.query(
                 "CREATE (a:Account {id: {id}, name: {name}, fullName: {fullName}, email: {email}, mode: {mode}, password: {password}, role: {role}, createdAt: {createdAt}, createdBy: {createdBy}})",
                 ImmutableMap.<String, Object>builder()
                         .put("id", rs.getInt("ID"))
