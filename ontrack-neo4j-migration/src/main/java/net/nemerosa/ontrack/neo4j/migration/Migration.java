@@ -18,6 +18,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.neo4j.template.Neo4jOperations;
+import org.springframework.jdbc.core.JdbcOperations;
 import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcDaoSupport;
 import org.springframework.stereotype.Component;
@@ -65,7 +66,9 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         // Migrating the projects
         logger.info("Migrating projects...");
         migrateProjects();
-        // TODO Migrating the branches
+        // Migrating the branches
+        logger.info("Migrating branches...");
+        migrateBranches();
         // TODO Migrating the promotion levels
         // TODO Migrating the validation stamps
         // TODO Migrating the builds
@@ -100,7 +103,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
 
     private void createUniqueIdGenerators() {
         createUniqueIdGenerator("Project");
-        // FIXME createUniqueIdGenerator("Branch");
+        createUniqueIdGenerator("Branch");
         // FIXME createUniqueIdGenerator("PromotionLevel");
         // FIXME createUniqueIdGenerator("ValidationStamp");
         // FIXME createUniqueIdGenerator("Build");
@@ -131,18 +134,20 @@ public class Migration extends NamedParameterJdbcDaoSupport {
      * ==========================
      */
 
+    @SuppressWarnings("RedundantCast")
     private void migrateProjects() {
-        getNamedParameterJdbcTemplate().getJdbcOperations().query(
+        jdbc().query(
                 "SELECT * FROM PROJECTS",
                 (RowCallbackHandler) rs -> {
                     int projectId = rs.getInt("ID");
                     Signature signature = getEventSignature("project", EventFactory.NEW_PROJECT, projectId);
                     template.query(
-                            "CREATE (p:Project {id: {id}, name: {name}, description: {description}, createdAt: {createdAt}, createdBy: {createdBy}})",
+                            "CREATE (p:Project {id: {id}, name: {name}, description: {description}, disabled: {disabled}, createdAt: {createdAt}, createdBy: {createdBy}})",
                             ImmutableMap.<String, Object>builder()
                                     .put("id", projectId)
                                     .put("name", rs.getString("NAME"))
                                     .put("description", safeString(rs.getString("DESCRIPTION")))
+                                    .put("disabled", rs.getBoolean("DISABLED"))
                                     .put("createdAt", Time.toJavaUtilDate(signature.getTime()))
                                     .put("createdBy", signature.getUser().getName())
                                     .build()
@@ -151,37 +156,30 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         );
     }
 
-    private void migrateBranch(Branch branch) {
-        logger.info("Migrating branch {}:{}...", branch.getProject().getName(), branch.getName());
-        Signature signature = getEventSignature("branch", EventFactory.NEW_BRANCH, branch.id());
-        template.query(
-                "MATCH (p:Project {id: {projectId}}) " +
-                        "CREATE (b:Branch {id: {id}, name: {name}, description: {description}, createdAt: {createdAt}, createdBy: {createdBy}, disabled: {disabled}})" +
-                        "-[:BRANCH_OF]->(p)",
-                ImmutableMap.<String, Object>builder()
-                        .put("id", branch.id())
-                        .put("projectId", branch.getProject().id())
-                        .put("name", branch.getName())
-                        .put("description", safeString(branch.getDescription()))
-                        .put("createdAt", Time.toJavaUtilDate(signature.getTime()))
-                        .put("createdBy", signature.getUser().getName())
-                        .put("disabled", branch.isDisabled())
-                        .build()
+    @SuppressWarnings("RedundantCast")
+    private void migrateBranches() {
+        jdbc().query(
+                "SELECT * FROM BRANCHES",
+                (RowCallbackHandler) rs -> {
+                    int branchId = rs.getInt("ID");
+                    int projectId = rs.getInt("PROJECTID");
+                    Signature signature = getEventSignature("branch", EventFactory.NEW_BRANCH, branchId);
+                    template.query(
+                            "MATCH (p:Project {id: {projectId}}) " +
+                                    "CREATE (b:Branch {id: {id}, name: {name}, description: {description}, createdAt: {createdAt}, createdBy: {createdBy}, disabled: {disabled}})" +
+                                    "-[:BRANCH_OF]->(p)",
+                            ImmutableMap.<String, Object>builder()
+                                    .put("id", branchId)
+                                    .put("projectId", projectId)
+                                    .put("name", rs.getString("NAME"))
+                                    .put("description", safeString(rs.getString("DESCRIPTION")))
+                                    .put("createdAt", Time.toJavaUtilDate(signature.getTime()))
+                                    .put("createdBy", signature.getUser().getName())
+                                    .put("disabled", rs.getBoolean("DISABLED"))
+                                    .build()
+                    );
+                }
         );
-        // Promotion levels
-        List<PromotionLevel> promotionLevels = structure.getPromotionLevelListForBranch(branch.getId());
-        int orderNb = 0;
-        for (PromotionLevel promotionLevel : promotionLevels) {
-            migratePromotionLevel(promotionLevel, ++orderNb);
-        }
-        // Validation stamps
-        List<ValidationStamp> validationStamps = structure.getValidationStampListForBranch(branch.getId());
-        orderNb = 0;
-        for (ValidationStamp validationStamp : validationStamps) {
-            migrateValidationStamp(validationStamp, ++orderNb);
-        }
-        // Builds
-        structure.builds(branch, this::migrateBuild, BuildSortDirection.FROM_OLDEST);
     }
 
     private void migratePromotionLevel(PromotionLevel promotionLevel, int orderNb) {
@@ -252,7 +250,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
 
     private void migrateBuildLinks() {
         // Build links
-        getNamedParameterJdbcTemplate().getJdbcOperations().query("SELECT * FROM BUILD_LINKS", (RowCallbackHandler) rs ->
+        jdbc().query("SELECT * FROM BUILD_LINKS", (RowCallbackHandler) rs ->
                 template.query(
                         "MATCH (a: Build {id: {sourceId}}), (b: Build {id: {targetId}}) " +
                                 "MERGE (a)-[:LINKED_TO]->(b)",
@@ -367,7 +365,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
     }
 
     private void migrateProjectGroupPermissions() {
-        getNamedParameterJdbcTemplate().getJdbcOperations().query("SELECT * FROM GROUP_PROJECT_AUTHORIZATIONS", (RowCallbackHandler) rs ->
+        jdbc().query("SELECT * FROM GROUP_PROJECT_AUTHORIZATIONS", (RowCallbackHandler) rs ->
                 template.query(
                         "MATCH (g: AccountGroup {id: {groupId}}), (p: Project {id: {id}}) " +
                                 "MERGE (g)-[:HAS_ROLE {role: {role}}]->(p)",
@@ -380,7 +378,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
     }
 
     private void migrateGlobalGroupPermissions() {
-        getNamedParameterJdbcTemplate().getJdbcOperations().query("SELECT * FROM GROUP_GLOBAL_AUTHORIZATIONS", (RowCallbackHandler) rs ->
+        jdbc().query("SELECT * FROM GROUP_GLOBAL_AUTHORIZATIONS", (RowCallbackHandler) rs ->
                 template.query(
                         "MATCH (g: AccountGroup {id: {groupId}}) " +
                                 "MERGE (r: GlobalRole {name: {role}}) " +
@@ -393,7 +391,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
     }
 
     private void migrateGlobalPermissions() {
-        getNamedParameterJdbcTemplate().getJdbcOperations().query("SELECT * FROM GLOBAL_AUTHORIZATIONS", (RowCallbackHandler) rs ->
+        jdbc().query("SELECT * FROM GLOBAL_AUTHORIZATIONS", (RowCallbackHandler) rs ->
                 template.query(
                         "MATCH (a: Account {id: {accountId}}) " +
                                 "MERGE (r: GlobalRole {name: {role}}) " +
@@ -406,7 +404,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
     }
 
     private void migrateProjectPermissions() {
-        getNamedParameterJdbcTemplate().getJdbcOperations().query("SELECT * FROM PROJECT_AUTHORIZATIONS", (RowCallbackHandler) rs ->
+        jdbc().query("SELECT * FROM PROJECT_AUTHORIZATIONS", (RowCallbackHandler) rs ->
                 template.query(
                         "MATCH (a: Account {id: {accountId}}), (p: Project {id: {id}}) " +
                                 "MERGE (a)-[:HAS_ROLE {role: {role}}]->(p)",
@@ -419,7 +417,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
     }
 
     private void migrateGroupMappings() {
-        getNamedParameterJdbcTemplate().getJdbcOperations().query("SELECT * FROM ACCOUNT_GROUP_MAPPING", (RowCallbackHandler) rs -> template.query(
+        jdbc().query("SELECT * FROM ACCOUNT_GROUP_MAPPING", (RowCallbackHandler) rs -> template.query(
                 String.format(
                         "MATCH (g: AccountGroup {id: {groupId}}) " +
                                 "CREATE (m:%sMapping {name: {name}})-[:MAPS_TO]->(g)",
@@ -433,7 +431,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
     }
 
     private void migrateAccountGroupLinks() {
-        getNamedParameterJdbcTemplate().getJdbcOperations().query("SELECT * FROM ACCOUNT_GROUP_LINK", (RowCallbackHandler) rs -> template.query(
+        jdbc().query("SELECT * FROM ACCOUNT_GROUP_LINK", (RowCallbackHandler) rs -> template.query(
                 "MATCH (a: Account {id: {accountId}}), (g: AccountGroup {id: {groupId}}) " +
                         "CREATE (a)-[:BELONGS_TO]->(g)",
                 ImmutableMap.<String, Object>builder()
@@ -444,7 +442,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
     }
 
     private void migrateAccounts() {
-        getNamedParameterJdbcTemplate().getJdbcOperations().query("SELECT * FROM ACCOUNTS", (RowCallbackHandler) rs -> template.query(
+        jdbc().query("SELECT * FROM ACCOUNTS", (RowCallbackHandler) rs -> template.query(
                 "CREATE (a:Account {id: {id}, name: {name}, fullName: {fullName}, email: {email}, mode: {mode}, password: {password}, role: {role}, createdAt: {createdAt}, createdBy: {createdBy}})",
                 ImmutableMap.<String, Object>builder()
                         .put("id", rs.getInt("ID"))
@@ -503,6 +501,10 @@ public class Migration extends NamedParameterJdbcDaoSupport {
             eventTime = Time.fromStorage((String) result.get("event_time"));
         }
         return Signature.of(eventTime, eventUser);
+    }
+
+    private JdbcOperations jdbc() {
+        return getNamedParameterJdbcTemplate().getJdbcOperations();
     }
 
     private String safeString(String description) {
