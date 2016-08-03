@@ -79,9 +79,11 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         logger.info("Migrating builds...");
         logger.info("Builds = {}", migrateBuilds());
         // Migrating the build links
-        logger.info("Migration build links...");
+        logger.info("Migrating build links...");
         logger.info("Build links = {}", migrateBuildLinks());
-        // TODO Migrating the promotion runs
+        // Migrating the promotion runs
+        logger.info("Migrating promotion runs...");
+        logger.info("Promotion runs = {}", migratePromotionRuns());
         // TODO Migrating the validation runs
         // Build links
         // Migrating ACL
@@ -313,18 +315,27 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         return count.get();
     }
 
-    private void migratePromotionRuns(Build build) {
-        structure.getPromotionRunsForBuild(build).forEach(promotionRun -> template.query(
-                "MATCH (b:Build {id: {buildId}}),(pl:PromotionLevel {id: {promotionLevelId}}) " +
-                        "CREATE (b)-[:PROMOTED_TO {createdAt: {createdAt}, createdBy: {createdAt}, description: {description}}]->(pl)",
-                ImmutableMap.<String, Object>builder()
-                        .put("buildId", build.id())
-                        .put("promotionLevelId", promotionRun.getPromotionLevel().id())
-                        .put("description", safeString(promotionRun.getDescription()))
-                        .put("createdAt", Time.toJavaUtilDate(promotionRun.getSignature().getTime()))
-                        .put("createdBy", promotionRun.getSignature().getUser().getName())
-                        .build()
-        ));
+    @SuppressWarnings("RedundantCast")
+    private int migratePromotionRuns() {
+        AtomicInteger count = new AtomicInteger();
+        jdbc().query(
+                "SELECT * FROM PROMOTION_RUNS ORDER BY ID ASC",
+                (RowCallbackHandler) rs -> {
+                    count.incrementAndGet();
+                    template.query(
+                            "MATCH (b:Build {id: {buildId}}),(pl:PromotionLevel {id: {promotionLevelId}}) " +
+                                    "CREATE (b)-[:PROMOTED_TO {createdAt: {createdAt}, createdBy: {createdAt}, description: {description}}]->(pl)",
+                            ImmutableMap.<String, Object>builder()
+                                    .put("buildId", rs.getInt("BUILDID"))
+                                    .put("promotionLevelId", rs.getInt("PROMOTIONLEVELID"))
+                                    .put("description", safeString(rs.getString("DESCRIPTION")))
+                                    .put("createdAt", Time.toJavaUtilDate(Time.fromStorage(rs.getString("CREATION"))))
+                                    .put("createdBy", rs.getString("CREATOR"))
+                                    .build()
+                    );
+                }
+        );
+        return count.get();
     }
 
     private void migrationValidationRuns(Build build) {
