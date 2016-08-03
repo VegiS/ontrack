@@ -1,21 +1,12 @@
 package net.nemerosa.ontrack.neo4j.migration;
 
-import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.CacheLoader;
-import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ImmutableMap;
 import net.nemerosa.ontrack.common.Time;
 import net.nemerosa.ontrack.model.events.EventFactory;
 import net.nemerosa.ontrack.model.events.EventType;
-import net.nemerosa.ontrack.model.exceptions.ValidationRunStatusNotFoundException;
-import net.nemerosa.ontrack.model.structure.Build;
 import net.nemerosa.ontrack.model.structure.Signature;
-import net.nemerosa.ontrack.model.structure.ValidationRunStatus;
-import net.nemerosa.ontrack.model.structure.ValidationRunStatusID;
 import net.nemerosa.ontrack.repository.AccountGroupRepository;
-import net.nemerosa.ontrack.repository.StructureRepository;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.reflect.FieldUtils;
 import org.neo4j.ogm.model.Result;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,7 +22,6 @@ import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Component
@@ -43,14 +33,11 @@ public class Migration extends NamedParameterJdbcDaoSupport {
 
     private final MigrationProperties migrationProperties;
     @Deprecated
-    private final StructureRepository structure;
-    @Deprecated
     private final AccountGroupRepository accountGroupRepository;
     private final Neo4jOperations template;
 
     @Autowired
-    public Migration(StructureRepository structure, Neo4jOperations template, DataSource dataSource, MigrationProperties migrationProperties, AccountGroupRepository accountGroupRepository) {
-        this.structure = structure;
+    public Migration(Neo4jOperations template, DataSource dataSource, MigrationProperties migrationProperties, AccountGroupRepository accountGroupRepository) {
         this.template = template;
         this.migrationProperties = migrationProperties;
         this.accountGroupRepository = accountGroupRepository;
@@ -84,8 +71,9 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         // Migrating the promotion runs
         logger.info("Migrating promotion runs...");
         logger.info("Promotion runs = {}", migratePromotionRuns());
-        // TODO Migrating the validation runs
-        // Build links
+        // Migrating the validation runs
+        logger.info("Migrating validation runs...");
+        logger.info("Validation runs = {}", migrateValidationRuns());
         // Migrating ACL
         logger.info("Migrating ACL...");
         migrateACL();
@@ -115,7 +103,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         createUniqueIdGenerator("PromotionLevel");
         createUniqueIdGenerator("ValidationStamp");
         createUniqueIdGenerator("Build");
-        // FIXME createUniqueIdGenerator("ValidationRun");
+        createUniqueIdGenerator("ValidationRun");
         // ----
         createUniqueIdGenerator("AccountGroup");
         createUniqueIdGenerator("Account");
@@ -338,63 +326,52 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         return count.get();
     }
 
-    private void migrationValidationRuns(Build build) {
-        structure.getValidationRunsForBuild(build, this::getCachedValidationRunStatusID).forEach(validationRun -> {
-            // Very first status
-            ValidationRunStatus initial = validationRun.getValidationRunStatuses().get(validationRun.getValidationRunStatuses().size() - 1);
-            // Validation run node
-            template.query(
-                    "MATCH (b:Build {id: {buildId}}),(vs:ValidationStamp {id: {validationStampId}}) " +
-                            "CREATE " +
-                            "   (b)-[:HAS_VALIDATION]->(vr:ValidationRun {id:{validationRunId}, createdAt: {createdAt}, createdBy: {createdAt}})," +
-                            "   (vr)-[:VALIDATION_FOR]->(vs)",
-                    ImmutableMap.<String, Object>builder()
-                            .put("buildId", build.id())
-                            .put("validationStampId", validationRun.getValidationStamp().id())
-                            .put("validationRunId", validationRun.id())
-                            .put("createdAt", Time.toJavaUtilDate(initial.getSignature().getTime()))
-                            .put("createdBy", initial.getSignature().getUser().getName())
-                            .build()
-            );
-            // Validation run statuses
-            for (ValidationRunStatus validationRunStatus : validationRun.getValidationRunStatuses()) {
-                template.query(
-                        "MATCH (vr: ValidationRun {id: {validationRunId}}) " +
-                                "CREATE (vr)-[:HAS_STATUS]->(vrs:ValidationRunStatus {status: {status}, createdAt: {createdAt}, createdBy: {createdAt}, description: {description}})",
-                        ImmutableMap.<String, Object>builder()
-                                .put("validationRunId", validationRun.id())
-                                .put("status", validationRunStatus.getStatusID().getId())
-                                .put("description", validationRunStatus.getDescription())
-                                .put("createdAt", Time.toJavaUtilDate(validationRunStatus.getSignature().getTime()))
-                                .put("createdBy", validationRunStatus.getSignature().getUser().getName())
-                                .build()
-                );
-            }
-        });
-    }
-
-    private final LoadingCache<String, ValidationRunStatusID> cacheValidationRunStatusID =
-            CacheBuilder.newBuilder().build(new CacheLoader<String, ValidationRunStatusID>() {
-                @Override
-                public ValidationRunStatusID load(String key) throws Exception {
-                    return getValidationRunStatusID(key);
+    @SuppressWarnings("RedundantCast")
+    private int migrateValidationRuns() {
+        AtomicInteger count = new AtomicInteger();
+        jdbc().query(
+                "SELECT * FROM VALIDATION_RUNS ORDER BY ID ASC",
+                (RowCallbackHandler) rs -> {
+                    count.incrementAndGet();
+                    int runId = rs.getInt("ID");
+                    // Validation run statuses
+                    List<Map<String, Object>> statuses = getNamedParameterJdbcTemplate().queryForList(
+                            "SELECT * FROM VALIDATION_RUN_STATUSES WHERE VALIDATIONRUNID = :runId ORDER BY ID ASC",
+                            Collections.singletonMap("runId", runId)
+                    );
+                    // Initial status
+                    Map<String, Object> initial = statuses.get(0);
+                    // Validation run node
+                    template.query(
+                            "MATCH (b:Build {id: {buildId}}),(vs:ValidationStamp {id: {validationStampId}}) " +
+                                    "CREATE " +
+                                    "   (b)-[:HAS_VALIDATION]->(vr:ValidationRun {id:{validationRunId}, createdAt: {createdAt}, createdBy: {createdAt}})," +
+                                    "   (vr)-[:VALIDATION_FOR]->(vs)",
+                            ImmutableMap.<String, Object>builder()
+                                    .put("buildId", rs.getInt("BUILDID"))
+                                    .put("validationStampId", rs.getInt("VALIDATIONSTAMPID"))
+                                    .put("validationRunId", runId)
+                                    .put("createdAt", Time.toJavaUtilDate(Time.fromStorage((String) initial.get("CREATION"))))
+                                    .put("createdBy", initial.get("CREATOR"))
+                                    .build()
+                    );
+                    // Validation run statuses
+                    for (Map<String, Object> status : statuses) {
+                        template.query(
+                                "MATCH (vr: ValidationRun {id: {validationRunId}}) " +
+                                        "CREATE (vr)-[:HAS_STATUS]->(vrs:ValidationRunStatus {status: {status}, createdAt: {createdAt}, createdBy: {createdAt}, description: {description}})",
+                                ImmutableMap.<String, Object>builder()
+                                        .put("validationRunId", runId)
+                                        .put("status", status.get("VALIDATIONRUNSTATUSID"))
+                                        .put("description", safeString((String) status.get("DESCRIPTION")))
+                                        .put("createdAt", Time.toJavaUtilDate(Time.fromStorage((String) status.get("CREATION"))))
+                                        .put("createdBy", status.get("CREATOR"))
+                                        .build()
+                        );
+                    }
                 }
-            });
-
-    private ValidationRunStatusID getValidationRunStatusID(String name) {
-        try {
-            return (ValidationRunStatusID) FieldUtils.readStaticField(ValidationRunStatusID.class, String.format("STATUS_%s", name));
-        } catch (IllegalAccessException e) {
-            throw new ValidationRunStatusNotFoundException(name);
-        }
-    }
-
-    private ValidationRunStatusID getCachedValidationRunStatusID(String name) {
-        try {
-            return cacheValidationRunStatusID.get(name);
-        } catch (ExecutionException e) {
-            throw new ValidationRunStatusNotFoundException(name);
-        }
+        );
+        return count.get();
     }
 
     /**
