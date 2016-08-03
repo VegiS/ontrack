@@ -78,9 +78,9 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         // Migrating the builds
         logger.info("Migrating builds...");
         logger.info("Builds = {}", migrateBuilds());
-        // TODO Migrating the build links
-//        logger.info("Migration build links...");
-//        migrateBuildLinks();
+        // Migrating the build links
+        logger.info("Migration build links...");
+        logger.info("Build links = {}", migrateBuildLinks());
         // TODO Migrating the promotion runs
         // TODO Migrating the validation runs
         // Build links
@@ -112,7 +112,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         createUniqueIdGenerator("Branch");
         createUniqueIdGenerator("PromotionLevel");
         createUniqueIdGenerator("ValidationStamp");
-        // FIXME createUniqueIdGenerator("Build");
+        createUniqueIdGenerator("Build");
         // FIXME createUniqueIdGenerator("ValidationRun");
         // ----
         createUniqueIdGenerator("AccountGroup");
@@ -289,22 +289,28 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         return count.get();
     }
 
-    private void migrateBuildLinks() {
+    @SuppressWarnings("RedundantCast")
+    private int migrateBuildLinks() {
         // Build links
-        jdbc().query("SELECT * FROM BUILD_LINKS", (RowCallbackHandler) rs ->
-                template.query(
-                        "MATCH (a: Build {id: {sourceId}}), (b: Build {id: {targetId}}) " +
-                                "MERGE (a)-[:LINKED_TO]->(b)",
-                        ImmutableMap.<String, Object>builder()
-                                .put("sourceId", rs.getInt("BUILDID"))
-                                .put("targetId", rs.getInt("TARGETBUILDID"))
-                                .build()
-                ));
+        AtomicInteger count = new AtomicInteger();
+        jdbc().query("SELECT * FROM BUILD_LINKS", (RowCallbackHandler) rs -> {
+            count.incrementAndGet();
+            template.query(
+                    "MATCH (a: Build {id: {sourceId}}), (b: Build {id: {targetId}}) " +
+                            "MERGE (a)-[:LINKED_TO]->(b)",
+                    ImmutableMap.<String, Object>builder()
+                            .put("sourceId", rs.getInt("BUILDID"))
+                            .put("targetId", rs.getInt("TARGETBUILDID"))
+                            .build()
+            );
+        });
         // Remove self links
         template.query(
                 "MATCH (b:Build)-[r:LINKED_TO]->(b) DELETE r",
                 Collections.emptyMap()
         );
+        // OK
+        return count.get();
     }
 
     private void migratePromotionRuns(Build build) {
