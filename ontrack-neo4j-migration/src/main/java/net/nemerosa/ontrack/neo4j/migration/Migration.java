@@ -256,7 +256,6 @@ public class Migration extends NamedParameterJdbcDaoSupport {
 
     private void migrateBuildLinks() {
         // Build links
-        // TODO Remove self links
         h2.getJdbcOperations().query("SELECT * FROM BUILD_LINKS", (RowCallbackHandler) rs ->
                 template.query(
                         "MATCH (a: Build {id: {sourceId}}), (b: Build {id: {targetId}}) " +
@@ -266,6 +265,11 @@ public class Migration extends NamedParameterJdbcDaoSupport {
                                 .put("targetId", rs.getInt("TARGETBUILDID"))
                                 .build()
                 ));
+        // Remove self links
+        template.query(
+                "MATCH (b:Build)-[r:LINKED_TO]->(b) DELETE r",
+                Collections.emptyMap()
+        );
     }
 
     private void migratePromotionRuns(Build build) {
