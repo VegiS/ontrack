@@ -459,10 +459,23 @@ public class Migration extends NamedParameterJdbcDaoSupport {
     private int migrateProperties() {
         AtomicInteger count = new AtomicInteger();
         jdbc().query(
-                "SELECT * FROM PROPERTIES ORDER BY ID DESC " + getLimit("properties", migrationProperties.getPropertyCount()),
+                "SELECT * FROM PROPERTIES " + getPropertiesFilter() + " ORDER BY ID DESC " + getLimit("properties", migrationProperties.getPropertyCount()),
                 (RowCallbackHandler) rs -> count.getAndAdd(migrateProperty(rs))
         );
         return count.get();
+    }
+
+    private String getPropertiesFilter() {
+        String propertyFilterType = migrationProperties.getPropertyFilterType();
+        if (StringUtils.isNotBlank(propertyFilterType)) {
+            logger.warn("Filtering properties on type {}", propertyFilterType);
+            return String.format(
+                    "WHERE TYPE = '%s'",
+                    propertyFilterType
+            );
+        } else {
+            return "";
+        }
     }
 
     private final LoadingCache<String, PropertyMigrator> migratorCache = CacheBuilder.newBuilder()

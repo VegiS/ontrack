@@ -39,4 +39,9 @@ public class MigrationProperties {
      */
     private int propertyCount = -1;
 
+    /**
+     * Property filter on type
+     */
+    private String propertyFilterType;
+
 }
