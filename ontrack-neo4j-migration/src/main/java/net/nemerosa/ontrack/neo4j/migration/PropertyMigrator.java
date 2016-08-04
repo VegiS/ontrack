@@ -1,0 +1,20 @@
+package net.nemerosa.ontrack.neo4j.migration;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import org.springframework.data.neo4j.template.Neo4jOperations;
+
+import java.io.IOException;
+
+public interface PropertyMigrator {
+
+    default String getCypherLinkQuery(Entity entity) {
+        return String.format(
+                "MERGE (e: %s {id: %d})-[:HAS_PROPERTY]->(p)",
+                entity.getType().getNodeName(),
+                entity.getId()
+        );
+    }
+
+    void migrate(String type, JsonNode data, Entity entity, Neo4jOperations template) throws IOException;
+
+}

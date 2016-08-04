@@ -1,13 +1,20 @@
 package net.nemerosa.ontrack.neo4j.migration;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ImmutableMap;
 import net.nemerosa.ontrack.common.Time;
 import net.nemerosa.ontrack.json.JsonParseException;
 import net.nemerosa.ontrack.json.JsonUtils;
 import net.nemerosa.ontrack.model.events.EventFactory;
 import net.nemerosa.ontrack.model.events.EventType;
+import net.nemerosa.ontrack.model.structure.ProjectEntityType;
 import net.nemerosa.ontrack.model.structure.Signature;
+import net.nemerosa.ontrack.neo4j.migration.support.DefaultPropertyMigrator;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.reflect.ConstructorUtils;
 import org.neo4j.ogm.model.Result;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,8 +31,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 
 @Component
 public class Migration extends NamedParameterJdbcDaoSupport {
@@ -81,7 +88,9 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         // Configurations
         logger.info("Migrating configurations...");
         logger.info("Configurations = {}", migrateConfigurations());
-        // TODO Properties
+        // Properties
+        logger.info("Migrating properties...");
+        logger.info("Properties = {}", migrateProperties());
         // TODO Build filters
         // TODO Shared build filters
         // TODO Branch templates
@@ -413,15 +422,84 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         String cypherQuery = String.format(
                 "CREATE (c: `%s` {%s})",
                 type,
-                map.keySet().stream()
-                        .map(key -> String.format("%1$s: {%1$s}", key))
-                        .collect(Collectors.joining(", "))
+                CypherUtils.getCypherParameters(map)
         );
         template.query(
                 cypherQuery,
                 params
         );
         return 1;
+    }
+
+    /**
+     * ==========================
+     * Properties
+     * ==========================
+     */
+
+    private int migrateProperties() {
+        AtomicInteger count = new AtomicInteger();
+        jdbc().query(
+                "SELECT * FROM PROPERTIES ORDER BY ID DESC " + getLimit("properties", migrationProperties.getPropertyCount()),
+                (RowCallbackHandler) rs -> count.getAndAdd(migrateProperty(rs))
+        );
+        return count.get();
+    }
+
+    private final LoadingCache<String, PropertyMigrator> migratorCache = CacheBuilder.newBuilder()
+            .build(new CacheLoader<String, PropertyMigrator>() {
+                @Override
+                public PropertyMigrator load(String key) throws Exception {
+                    return getMigrator(key);
+                }
+            });
+
+    private int migrateProperty(ResultSet rs) throws SQLException {
+        // Type & Data
+        String type = rs.getString("TYPE");
+        JsonNode data = JsonUtils.toNode(rs.getString("JSON"));
+        // Looks for the associated entity
+        Entity entity = lookupEntity(rs);
+        // Gets a converter for the type
+        PropertyMigrator migrator = getCachedMigrator(type);
+        // Conversion
+        migrateProperty(migrator, type, data, entity);
+        // OK
+        return 1;
+    }
+
+    private void migrateProperty(PropertyMigrator migrator, String type, JsonNode data, Entity entity) {
+        try {
+            migrator.migrate(type, data, entity, template);
+        } catch (Exception ex) {
+            // TODO Option to go on with only a log message
+            throw new RuntimeException("Cannot migrate property " + type, ex);
+        }
+    }
+
+    private PropertyMigrator getCachedMigrator(String type) {
+        PropertyMigrator migrator;
+        try {
+            migrator = migratorCache.get(type);
+        } catch (ExecutionException e) {
+            throw new RuntimeException("Could not get property migrator for " + type, e);
+        }
+        return migrator;
+    }
+
+    private PropertyMigrator getMigrator(String type) {
+        // TODO Use introspection right but consider using injection
+        String className = String.format("%sConverter", type);
+        try {
+            @SuppressWarnings("unchecked")
+            Class<? extends PropertyMigrator> clazz = (Class<? extends PropertyMigrator>) Class.forName(className);
+            return ConstructorUtils.invokeConstructor(clazz);
+        } catch (ClassNotFoundException ex) {
+            logger.warn("Could not find any property migrator for {}, using default one.", type);
+            return DefaultPropertyMigrator.INSTANCE;
+        } catch (Exception e) {
+            throw new RuntimeException("Cannot create a property migrator for " + type, e);
+        }
     }
 
     /**
@@ -558,12 +636,21 @@ public class Migration extends NamedParameterJdbcDaoSupport {
                 )
         );
     }
-
     /**
      * ==========================
      * Utility methods
      * ==========================
      */
+
+    private Entity lookupEntity(ResultSet rs) throws SQLException {
+        for (ProjectEntityType type : ProjectEntityType.values()) {
+            int id = rs.getInt(type.name());
+            if (!rs.wasNull()) {
+                return new Entity(type, id);
+            }
+        }
+        throw new IllegalStateException("Cannot find any entity reference");
+    }
 
     private String getLimit(String name, int count) {
         String limit;

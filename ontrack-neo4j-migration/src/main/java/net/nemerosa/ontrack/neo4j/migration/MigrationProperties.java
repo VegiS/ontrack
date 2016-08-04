@@ -10,23 +10,28 @@ import org.springframework.stereotype.Component;
 public class MigrationProperties {
 
     /**
-     * Limit for the number of builds being important (-1 for no limit)
+     * Limit for the number of builds being imported (-1 for no limit)
      */
     private int buildCount = -1;
 
     /**
-     * Limit for the number of build links being important (-1 for no limit)
+     * Limit for the number of build links being imported (-1 for no limit)
      */
     private int buildLinkCount = -1;
 
     /**
-     * Limit for the number of promotion runs being important (-1 for no limit)
+     * Limit for the number of promotion runs being imported (-1 for no limit)
      */
     private int promotionRunCount = -1;
 
     /**
-     * Limit for the number of validation runs being important (-1 for no limit)
+     * Limit for the number of validation runs being imported (-1 for no limit)
      */
     private int validationRunCount = -1;
+
+    /**
+     * Limit for the number of properties being imported (-1 for no limit)
+     */
+    private int propertyCount = -1;
 
 }
