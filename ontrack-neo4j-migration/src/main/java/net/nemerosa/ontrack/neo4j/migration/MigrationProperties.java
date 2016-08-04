@@ -10,6 +10,11 @@ import org.springframework.stereotype.Component;
 public class MigrationProperties {
 
     /**
+     * Ignoring the property migration errors?
+     */
+    private boolean ignorePropertyError = false;
+
+    /**
      * Limit for the number of builds being imported (-1 for no limit)
      */
     private int buildCount = -1;

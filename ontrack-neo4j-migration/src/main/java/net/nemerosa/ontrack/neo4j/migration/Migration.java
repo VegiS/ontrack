@@ -491,8 +491,11 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         try {
             migrator.migrate(type, data, entity, template);
         } catch (Exception ex) {
-            // TODO Option to go on with only a log message
-            throw new RuntimeException("Cannot migrate property " + type, ex);
+            if (migrationProperties.isIgnorePropertyError()) {
+                logger.error("Cannot migrate property " + type + ": " + ex.getMessage());
+            } else {
+                throw new RuntimeException("Cannot migrate property " + type, ex);
+            }
         }
     }
 
