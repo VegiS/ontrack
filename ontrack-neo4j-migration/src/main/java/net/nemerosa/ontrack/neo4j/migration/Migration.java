@@ -156,11 +156,10 @@ public class Migration extends NamedParameterJdbcDaoSupport {
 
     @SuppressWarnings("RedundantCast")
     private int migrateProjects() {
-        AtomicInteger count = new AtomicInteger();
-        jdbc().query(
+        return migrateAndCount(
+                "projects",
                 "SELECT * FROM PROJECTS",
-                (RowCallbackHandler) rs -> {
-                    count.incrementAndGet();
+                rs -> {
                     int projectId = rs.getInt("ID");
                     Signature signature = getEventSignature("project", EventFactory.NEW_PROJECT, projectId);
                     template.query(
@@ -176,16 +175,14 @@ public class Migration extends NamedParameterJdbcDaoSupport {
                     );
                 }
         );
-        return count.get();
     }
 
     @SuppressWarnings("RedundantCast")
     private int migrateBranches() {
-        AtomicInteger count = new AtomicInteger();
-        jdbc().query(
+        return migrateAndCount(
+                "branches",
                 "SELECT * FROM BRANCHES",
-                (RowCallbackHandler) rs -> {
-                    count.incrementAndGet();
+                rs -> {
                     int branchId = rs.getInt("ID");
                     int projectId = rs.getInt("PROJECTID");
                     Signature signature = getEventSignature("branch", EventFactory.NEW_BRANCH, branchId);
@@ -205,16 +202,14 @@ public class Migration extends NamedParameterJdbcDaoSupport {
                     );
                 }
         );
-        return count.incrementAndGet();
     }
 
     @SuppressWarnings("RedundantCast")
     private int migratePromotionLevels() {
-        AtomicInteger count = new AtomicInteger();
-        jdbc().query(
+        return migrateAndCount(
+                "promotion levels",
                 "SELECT * FROM PROMOTION_LEVELS",
-                (RowCallbackHandler) rs -> {
-                    count.incrementAndGet();
+                rs -> {
                     int promotionLevelId = rs.getInt("ID");
                     Signature signature = getEventSignature("promotion_level", EventFactory.NEW_PROMOTION_LEVEL, promotionLevelId);
                     template.query(
@@ -238,16 +233,14 @@ public class Migration extends NamedParameterJdbcDaoSupport {
                     );
                 }
         );
-        return count.get();
     }
 
     @SuppressWarnings("RedundantCast")
     private int migrateValidationStamps() {
-        AtomicInteger count = new AtomicInteger();
-        jdbc().query(
+        return migrateAndCount(
+                "validation stamps",
                 "SELECT * FROM VALIDATION_STAMPS",
-                (RowCallbackHandler) rs -> {
-                    count.incrementAndGet();
+                rs -> {
                     int validationStampId = rs.getInt("ID");
                     Signature signature = getEventSignature("validation_stamp", EventFactory.NEW_VALIDATION_STAMP, validationStampId);
                     template.query(
@@ -270,94 +263,81 @@ public class Migration extends NamedParameterJdbcDaoSupport {
                     );
                 }
         );
-        return count.get();
     }
 
     @SuppressWarnings("RedundantCast")
     private int migrateBuilds() {
-        AtomicInteger count = new AtomicInteger();
         String limit = getLimit("builds", migrationProperties.getBuildCount());
-        jdbc().query(
+        return migrateAndCount(
+                "builds",
                 String.format(
                         "SELECT * FROM BUILDS ORDER BY ID DESC %s",
                         limit
                 ),
-                (RowCallbackHandler) rs -> {
-                    count.incrementAndGet();
-                    template.query(
-                            "MATCH (b:Branch {id: {branchId}}) " +
-                                    "CREATE (r:Build {id: {id}, name: {name}, description: {description}, createdAt: {createdAt}, createdBy: {createdBy}})" +
-                                    "-[:BUILD_OF]->(b)",
-                            ImmutableMap.<String, Object>builder()
-                                    .put("id", rs.getInt("ID"))
-                                    .put("branchId", rs.getInt("BRANCHID"))
-                                    .put("name", rs.getString("NAME"))
-                                    .put("description", safeString(rs.getString("DESCRIPTION")))
-                                    .put("createdAt", Time.toJavaUtilDate(Time.fromStorage(rs.getString("CREATION"))))
-                                    .put("createdBy", rs.getString("CREATOR"))
-                                    .build()
-                    );
-                }
+                rs -> template.query(
+                        "MATCH (b:Branch {id: {branchId}}) " +
+                                "CREATE (r:Build {id: {id}, name: {name}, description: {description}, createdAt: {createdAt}, createdBy: {createdBy}})" +
+                                "-[:BUILD_OF]->(b)",
+                        ImmutableMap.<String, Object>builder()
+                                .put("id", rs.getInt("ID"))
+                                .put("branchId", rs.getInt("BRANCHID"))
+                                .put("name", rs.getString("NAME"))
+                                .put("description", safeString(rs.getString("DESCRIPTION")))
+                                .put("createdAt", Time.toJavaUtilDate(Time.fromStorage(rs.getString("CREATION"))))
+                                .put("createdBy", rs.getString("CREATOR"))
+                                .build()
+                )
         );
-        return count.get();
     }
 
     @SuppressWarnings("RedundantCast")
     private int migrateBuildLinks() {
-        // Build links
-        AtomicInteger count = new AtomicInteger();
-        jdbc().query(
+        int count = migrateAndCount(
+                "build links",
                 "SELECT * FROM BUILD_LINKS ORDER BY ID DESC " + getLimit("build links", migrationProperties.getBuildLinkCount()),
-                (RowCallbackHandler) rs -> {
-                    count.incrementAndGet();
-                    template.query(
-                            "MATCH (a: Build {id: {sourceId}}), (b: Build {id: {targetId}}) " +
-                                    "MERGE (a)-[:LINKED_TO]->(b)",
-                            ImmutableMap.<String, Object>builder()
-                                    .put("sourceId", rs.getInt("BUILDID"))
-                                    .put("targetId", rs.getInt("TARGETBUILDID"))
-                                    .build()
-                    );
-                });
+                rs -> template.query(
+                        "MATCH (a: Build {id: {sourceId}}), (b: Build {id: {targetId}}) " +
+                                "MERGE (a)-[:LINKED_TO]->(b)",
+                        ImmutableMap.<String, Object>builder()
+                                .put("sourceId", rs.getInt("BUILDID"))
+                                .put("targetId", rs.getInt("TARGETBUILDID"))
+                                .build()
+                )
+        );
         // Remove self links
         template.query(
                 "MATCH (b:Build)-[r:LINKED_TO]->(b) DELETE r",
                 Collections.emptyMap()
         );
         // OK
-        return count.get();
+        return count;
     }
 
     @SuppressWarnings("RedundantCast")
     private int migratePromotionRuns() {
-        AtomicInteger count = new AtomicInteger();
-        jdbc().query(
+        return migrateAndCount(
+                "promotion runs",
                 "SELECT * FROM PROMOTION_RUNS ORDER BY ID DESC " + getLimit("promotion runs", migrationProperties.getPromotionRunCount()),
-                (RowCallbackHandler) rs -> {
-                    count.incrementAndGet();
-                    template.query(
-                            "MATCH (b:Build {id: {buildId}}),(pl:PromotionLevel {id: {promotionLevelId}}) " +
-                                    "CREATE (b)-[:PROMOTED_TO {createdAt: {createdAt}, createdBy: {createdAt}, description: {description}}]->(pl)",
-                            ImmutableMap.<String, Object>builder()
-                                    .put("buildId", rs.getInt("BUILDID"))
-                                    .put("promotionLevelId", rs.getInt("PROMOTIONLEVELID"))
-                                    .put("description", safeString(rs.getString("DESCRIPTION")))
-                                    .put("createdAt", Time.toJavaUtilDate(Time.fromStorage(rs.getString("CREATION"))))
-                                    .put("createdBy", rs.getString("CREATOR"))
-                                    .build()
-                    );
-                }
+                rs -> template.query(
+                        "MATCH (b:Build {id: {buildId}}),(pl:PromotionLevel {id: {promotionLevelId}}) " +
+                                "CREATE (b)-[:PROMOTED_TO {createdAt: {createdAt}, createdBy: {createdAt}, description: {description}}]->(pl)",
+                        ImmutableMap.<String, Object>builder()
+                                .put("buildId", rs.getInt("BUILDID"))
+                                .put("promotionLevelId", rs.getInt("PROMOTIONLEVELID"))
+                                .put("description", safeString(rs.getString("DESCRIPTION")))
+                                .put("createdAt", Time.toJavaUtilDate(Time.fromStorage(rs.getString("CREATION"))))
+                                .put("createdBy", rs.getString("CREATOR"))
+                                .build()
+                )
         );
-        return count.get();
     }
 
     @SuppressWarnings("RedundantCast")
     private int migrateValidationRuns() {
-        AtomicInteger count = new AtomicInteger();
-        jdbc().query(
+        return migrateAndCount(
+                "validation runs",
                 "SELECT * FROM VALIDATION_RUNS ORDER BY ID DESC " + getLimit("validation runs", migrationProperties.getValidationRunCount()),
-                (RowCallbackHandler) rs -> {
-                    count.incrementAndGet();
+                rs -> {
                     int runId = rs.getInt("ID");
                     // Validation run statuses
                     List<Map<String, Object>> statuses = getNamedParameterJdbcTemplate().queryForList(
@@ -396,7 +376,6 @@ public class Migration extends NamedParameterJdbcDaoSupport {
                     }
                 }
         );
-        return count.get();
     }
 
     /**
@@ -406,12 +385,11 @@ public class Migration extends NamedParameterJdbcDaoSupport {
      */
 
     private int migrateConfigurations() {
-        AtomicInteger count = new AtomicInteger();
-        jdbc().query(
+        return migrateAndCount(
+                "configurations",
                 "SELECT * FROM CONFIGURATIONS",
-                (RowCallbackHandler) rs -> count.getAndAdd(migrateConfiguration(rs))
+                this::migrateConfiguration
         );
-        return count.get();
     }
 
     private int migrateConfiguration(ResultSet rs) throws SQLException {
@@ -457,12 +435,11 @@ public class Migration extends NamedParameterJdbcDaoSupport {
      */
 
     private int migrateProperties() {
-        AtomicInteger count = new AtomicInteger();
-        jdbc().query(
+        return migrateAndCount(
+                "properties",
                 "SELECT * FROM PROPERTIES " + getPropertiesFilter() + " ORDER BY ID DESC " + getLimit("properties", migrationProperties.getPropertyCount()),
-                (RowCallbackHandler) rs -> count.getAndAdd(migrateProperty(rs))
+                this::migrateProperty
         );
-        return count.get();
     }
 
     private String getPropertiesFilter() {
@@ -486,7 +463,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
                 }
             });
 
-    private int migrateProperty(ResultSet rs) throws SQLException {
+    private void migrateProperty(ResultSet rs) throws SQLException {
         // Type & Data
         String type = rs.getString("TYPE");
         JsonNode data = JsonUtils.toNode(rs.getString("JSON"));
@@ -496,8 +473,6 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         PropertyMigrator migrator = getCachedMigrator(type);
         // Conversion
         migrateProperty(migrator, type, data, entity);
-        // OK
-        return 1;
     }
 
     private void migrateProperty(PropertyMigrator migrator, String type, JsonNode data, Entity entity) {
@@ -677,6 +652,35 @@ public class Migration extends NamedParameterJdbcDaoSupport {
      * Utility methods
      * ==========================
      */
+
+    @FunctionalInterface
+    private interface ResultSetMigrator {
+
+        void migrate(ResultSet rs) throws Exception;
+
+    }
+
+    @SuppressWarnings("RedundantCast")
+    private int migrateAndCount(String name, String sql, ResultSetMigrator consumer) {
+        AtomicInteger count = new AtomicInteger();
+        jdbc().query(
+                sql,
+                (RowCallbackHandler) rs -> {
+                    int current = count.incrementAndGet();
+                    if (current % 500 == 0) {
+                        logger.info("Migrating {}: {}", name, current);
+                    }
+                    try {
+                        consumer.migrate(rs);
+                    } catch (RuntimeException ex) {
+                        throw ex;
+                    } catch (Exception ex) {
+                        throw new RuntimeException("Error while migrating " + name, ex);
+                    }
+                }
+        );
+        return count.get();
+    }
 
     private Entity lookupEntity(ResultSet rs) throws SQLException {
         for (ProjectEntityType type : ProjectEntityType.values()) {
