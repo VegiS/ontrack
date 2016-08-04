@@ -10,22 +10,16 @@ buildscript {
 
 apply plugin: 'spring-boot'
 
-ext {
-    ontrackBaseVersion = '2.24.1'
-}
-
 repositories {
     mavenCentral()
     maven { url "http://repo.spring.io/milestone" }
 }
 
 dependencies {
-    compile 'args4j:args4j:2.33'
     compile 'org.springframework.boot:spring-boot-starter-jdbc'
     compile 'org.springframework.boot:spring-boot-starter-data-neo4j'
-    compile "net.nemerosa.ontrack:ontrack-repository:${ontrackBaseVersion}"
+    compile project(':ontrack-model')
 
-    runtime "net.nemerosa.ontrack:ontrack-repository-impl:${ontrackBaseVersion}"
     runtime libraries.validation_impl
     runtime libraries.h2
 }
