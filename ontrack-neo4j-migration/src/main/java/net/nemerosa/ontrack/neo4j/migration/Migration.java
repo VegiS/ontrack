@@ -17,7 +17,10 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcDaoSupport;
 import org.springframework.stereotype.Component;
 
 import javax.sql.DataSource;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.LocalDateTime;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -191,7 +194,10 @@ public class Migration extends NamedParameterJdbcDaoSupport {
                     Signature signature = getEventSignature("promotion_level", EventFactory.NEW_PROMOTION_LEVEL, promotionLevelId);
                     template.query(
                             "MATCH (b:Branch {id: {branchId}}) " +
-                                    "CREATE (pl:PromotionLevel {id: {id}, name: {name}, description: {description}, createdAt: {createdAt}, createdBy: {createdBy}, orderNb: {orderNb}})" +
+                                    "CREATE (pl:PromotionLevel {id: {id}, name: {name}, description: {description}, " +
+                                    "createdAt: {createdAt}, createdBy: {createdBy}, orderNb: {orderNb}, " +
+                                    "imageType: {imageType}, imageBytes: {imageBytes} " +
+                                    "})" +
                                     "-[:PROMOTION_LEVEL_OF]->(b)",
                             ImmutableMap.<String, Object>builder()
                                     .put("id", promotionLevelId)
@@ -201,8 +207,8 @@ public class Migration extends NamedParameterJdbcDaoSupport {
                                     .put("createdAt", Time.toJavaUtilDate(signature.getTime()))
                                     .put("createdBy", signature.getUser().getName())
                                     .put("orderNb", rs.getInt("ORDERNB"))
-                                    // TODO Image type
-                                    // TODO Image bytes - in a separate file
+                                    .put("imageType", safeString(rs.getString("IMAGETYPE")))
+                                    .put("imageBytes", toBinaryString(rs, "IMAGEBYTES"))
                                     .build()
                     );
                 }
@@ -221,7 +227,9 @@ public class Migration extends NamedParameterJdbcDaoSupport {
                     Signature signature = getEventSignature("validation_stamp", EventFactory.NEW_VALIDATION_STAMP, validationStampId);
                     template.query(
                             "MATCH (b:Branch {id: {branchId}}) " +
-                                    "CREATE (vs:ValidationStamp {id: {id}, name: {name}, description: {description}, createdAt: {createdAt}, createdBy: {createdBy}, orderNb: {orderNb}})" +
+                                    "CREATE (vs:ValidationStamp {id: {id}, name: {name}, description: {description}, createdAt: {createdAt}, createdBy: {createdBy}, orderNb: {orderNb}," +
+                                    "imageType: {imageType}, imageBytes: {imageBytes} " +
+                                    "})" +
                                     "-[:VALIDATION_STAMP_OF]->(b)",
                             ImmutableMap.<String, Object>builder()
                                     .put("id", validationStampId)
@@ -231,8 +239,8 @@ public class Migration extends NamedParameterJdbcDaoSupport {
                                     .put("createdAt", Time.toJavaUtilDate(signature.getTime()))
                                     .put("createdBy", signature.getUser().getName())
                                     .put("orderNb", rs.getInt("ORDERNB"))
-                                    // TODO Image type
-                                    // TODO Image bytes - in a separate file
+                                    .put("imageType", safeString(rs.getString("IMAGETYPE")))
+                                    .put("imageBytes", toBinaryString(rs, "IMAGEBYTES"))
                                     .build()
                     );
                 }
@@ -540,6 +548,15 @@ public class Migration extends NamedParameterJdbcDaoSupport {
             eventTime = Time.fromStorage((String) result.get("event_time"));
         }
         return Signature.of(eventTime, eventUser);
+    }
+
+    private String toBinaryString(ResultSet rs, String column) throws SQLException {
+        byte[] bytes = rs.getBytes(column);
+        if (bytes == null) {
+            return "";
+        } else {
+            return Base64.getEncoder().encodeToString(bytes);
+        }
     }
 
     private JdbcOperations jdbc() {
