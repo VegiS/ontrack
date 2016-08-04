@@ -2,6 +2,8 @@ package net.nemerosa.ontrack.neo4j.migration;
 
 import com.google.common.collect.ImmutableMap;
 import net.nemerosa.ontrack.common.Time;
+import net.nemerosa.ontrack.json.JsonParseException;
+import net.nemerosa.ontrack.json.JsonUtils;
 import net.nemerosa.ontrack.model.events.EventFactory;
 import net.nemerosa.ontrack.model.events.EventType;
 import net.nemerosa.ontrack.model.structure.Signature;
@@ -17,14 +19,13 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcDaoSupport;
 import org.springframework.stereotype.Component;
 
 import javax.sql.DataSource;
+import java.io.IOException;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
-import java.util.Base64;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 @Component
 public class Migration extends NamedParameterJdbcDaoSupport {
@@ -77,7 +78,9 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         logger.info("Migrating ACL...");
         migrateACL();
         // TODO Entity data
-        // TODO Configurations
+        // Configurations
+        logger.info("Migrating configurations...");
+        logger.info("Configurations = {}", migrateConfigurations());
         // TODO Properties
         // TODO Build filters
         // TODO Shared build filters
@@ -113,14 +116,16 @@ public class Migration extends NamedParameterJdbcDaoSupport {
                 ImmutableMap.<String, Object>builder()
                         .put("label", label)
                         .build());
-        int max = (Integer) query.queryResults().iterator().next().get("MAX");
-        template.query(
-                "CREATE (u:UniqueId {label: {label}, id: {id}})",
-                ImmutableMap.<String, Object>builder()
-                        .put("label", label)
-                        .put("id", max)
-                        .build()
-        );
+        Integer max = (Integer) query.queryResults().iterator().next().get("MAX");
+        if (max != null) {
+            template.query(
+                    "CREATE (u:UniqueId {label: {label}, id: {id}})",
+                    ImmutableMap.<String, Object>builder()
+                            .put("label", label)
+                            .put("id", max)
+                            .build()
+            );
+        }
     }
 
     /**
@@ -372,6 +377,51 @@ public class Migration extends NamedParameterJdbcDaoSupport {
                 }
         );
         return count.get();
+    }
+
+    /**
+     * ==========================
+     * Configurations
+     * ==========================
+     */
+
+    private int migrateConfigurations() {
+        AtomicInteger count = new AtomicInteger();
+        jdbc().query(
+                "SELECT * FROM CONFIGURATIONS",
+                (RowCallbackHandler) rs -> count.getAndAdd(migrateConfiguration(rs))
+        );
+        return count.get();
+    }
+
+    private int migrateConfiguration(ResultSet rs) throws SQLException {
+        String type = rs.getString("TYPE");
+        String name = rs.getString("NAME");
+        String json = rs.getString("CONTENT");
+        // Parsing of the JSON
+        Map<String, ?> map;
+        try {
+            map = JsonUtils.toMap(JsonUtils.toNode(json));
+        } catch (IOException e) {
+            throw new JsonParseException(e);
+        }
+        // Creation of the node
+        Map<String, Object> params = new HashMap<>(map);
+        params.put("name", name);
+        params.put("createdAt", Time.toJavaUtilDate(Time.now()));
+        params.put("createdBy", MIGRATION_USER);
+        String cypherQuery = String.format(
+                "CREATE (c: `%s` {%s})",
+                type,
+                map.keySet().stream()
+                        .map(key -> String.format("%1$s: {%1$s}", key))
+                        .collect(Collectors.joining(", "))
+        );
+        template.query(
+                cypherQuery,
+                params
+        );
+        return 1;
     }
 
     /**

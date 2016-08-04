@@ -26,6 +26,14 @@ public final class JsonUtils {
         }
     }
 
+    public static JsonNode toNode(String json) {
+        try {
+            return mapper.readTree(json);
+        } catch (IOException ex) {
+            throw new JsonParseException(ex);
+        }
+    }
+
     public static JsonNode format(Object value) {
         return mapper.valueToTree(value);
     }
