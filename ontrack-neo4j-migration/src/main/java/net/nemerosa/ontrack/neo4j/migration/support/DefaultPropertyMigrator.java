@@ -18,10 +18,12 @@ public class DefaultPropertyMigrator implements PropertyMigrator {
     public void migrate(String type, JsonNode data, Entity entity, Neo4jOperations template) throws IOException {
         Map<String, ?> params = JsonUtils.toMap(data);
         String cypherQuery = String.format(
-                "CREATE (p: `%s` {%s}) %s",
+                " MATCH (e: `%s` {id: %d}) " +
+                        "CREATE (e)-[:HAS_PROPERTY]->(p: `%s` {%s})",
+                entity.getType().getNodeName(),
+                entity.getId(),
                 type,
-                CypherUtils.getCypherParameters(params),
-                getCypherLinkQuery(entity)
+                CypherUtils.getCypherParameters(params)
         );
         template.query(
                 cypherQuery,

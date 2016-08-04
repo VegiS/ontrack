@@ -57,6 +57,17 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         // Deleting all nodes
         logger.info("Removing all nodes...");
         template.query("MATCH (n) DETACH DELETE n", Collections.emptyMap());
+        // Creating the indexes up front
+        logger.info("Creating indexes...");
+        for (ProjectEntityType type : ProjectEntityType.values()) {
+            template.query(
+                    String.format(
+                            "CREATE CONSTRAINT ON (p:`%s`) ASSERT p.id IS UNIQUE",
+                            type.getNodeName()
+                    ),
+                    Collections.emptyMap()
+            );
+        }
         // Migrating the projects
         logger.info("Migrating projects...");
         logger.info("Projects = {}", migrateProjects());
@@ -407,6 +418,14 @@ public class Migration extends NamedParameterJdbcDaoSupport {
         String type = rs.getString("TYPE");
         String name = rs.getString("NAME");
         String json = rs.getString("CONTENT");
+        // Indexation of the type, based on the name
+        template.query(
+                String.format(
+                        "CREATE CONSTRAINT ON (c:`%s`) ASSERT c.name IS UNIQUE",
+                        type
+                ),
+                Collections.emptyMap()
+        );
         // Parsing of the JSON
         Map<String, ?> map;
         try {
@@ -489,7 +508,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
 
     private PropertyMigrator getMigrator(String type) {
         // TODO Use introspection right but consider using injection
-        String className = String.format("%sConverter", type);
+        String className = String.format("%sMigrator", type);
         try {
             @SuppressWarnings("unchecked")
             Class<? extends PropertyMigrator> clazz = (Class<? extends PropertyMigrator>) Class.forName(className);
@@ -636,6 +655,7 @@ public class Migration extends NamedParameterJdbcDaoSupport {
                 )
         );
     }
+
     /**
      * ==========================
      * Utility methods

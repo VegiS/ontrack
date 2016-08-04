@@ -7,14 +7,6 @@ import java.io.IOException;
 
 public interface PropertyMigrator {
 
-    default String getCypherLinkQuery(Entity entity) {
-        return String.format(
-                "MERGE (e: %s {id: %d})-[:HAS_PROPERTY]->(p)",
-                entity.getType().getNodeName(),
-                entity.getId()
-        );
-    }
-
     void migrate(String type, JsonNode data, Entity entity, Neo4jOperations template) throws IOException;
 
 }
