@@ -1,25 +1,29 @@
-# Docker container to use to build Ontrack
-# Consider creating an `ontrack-build` image and publish it with a version (1, 2, etc.)
-# This would avoid to rebuild it each time we switch from one slave to the other
-
 # Base
-# Using a Java based image in order to get the JDK we want, without having Jenkins to provision it
-# each time on the slave
 FROM java:openjdk-8u66-jdk
 
-# Meta-information
-MAINTAINER Damien Coraboeuf <damien.coraboeuf@gmail.com>
+# Makes sure all tools for the build are installed
+RUN apt-get update && apt-get install -y \
+    git \
+    subversion \
+    zip \
+    xvfb \
+    iceweasel \
+    && rm -rf /var/lib/apt/lists/*
 
-# SVN & Git installation
-RUN apt-get update \
-    && apt-get install -y subversion git xvfb unzip
+# Installing Docker
+RUN wget https://get.docker.com/builds/Linux/x86_64/docker-1.11.0.tgz -O docker.tgz
+RUN tar -xvzf docker.tgz
+RUN mv docker/* /usr/bin/
+RUN chmod +x /usr/bin/docker
 
-# Gradle cache
-VOLUME /root/.gradle
+# Installs Docker Compose
+RUN curl --fail --silent -L https://github.com/docker/compose/releases/download/1.6.2/docker-compose-`uname -s`-`uname -m` > /usr/bin/docker-compose
+RUN chmod +x /usr/bin/docker-compose
 
-# Node JS cache
-VOLUME /root/.cache
+# Installs Docker Machine
+RUN curl --fail --silent -L https://github.com/docker/machine/releases/download/v0.7.0/docker-machine-`uname -s`-`uname -m` > /usr/bin/docker-machine
+RUN chmod +x /usr/bin/docker-machine
 
 # Git configuration
-RUN git config --global user.email "jenkins@nemerosa.net"
-RUN git config --global user.name "Jenkins"
+RUN git config --global user.email "jenkins@nemerosa.net" \
+    && git config --global user.name "Jenkins"

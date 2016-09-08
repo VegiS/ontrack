@@ -46,9 +46,9 @@ task npmPackages(type: NpmTask, dependsOn: npmCacheConfig) {
 task bowerInstall(type: NodeTask, dependsOn: npmPackages) {
     script = file('node_modules/bower/bin/bower')
     def bowerArgs = ["--config.storage.cache=${cacheDir}/caches/bower/cache",
-            "--config.storage.packages=${cacheDir}/caches/bower/packages",
-            "--config.storage.registry=${cacheDir}/caches/bower/registry",
-            'install']
+                     "--config.storage.packages=${cacheDir}/caches/bower/packages",
+                     "--config.storage.registry=${cacheDir}/caches/bower/registry",
+                     'install']
     if (project.properties.bowerOptions) {
         bowerArgs.add(project.properties.bowerOptions as String)
     }

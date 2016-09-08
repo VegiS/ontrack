@@ -10,11 +10,11 @@ final class SVNTestUtils {
     private SVNTestUtils() {
     }
 
-    static SVNRepository repository(String url = 'svn://localhost') {
+    static SVNRepository repository(String url, String name = null) {
         SVNRepository.of(
                 1,
                 new SVNConfiguration(
-                        uid("C"),
+                        name ?: uid('S'),
                         url,
                         "test",
                         "test",
