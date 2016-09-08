@@ -7,7 +7,7 @@ node('docker') {
     checkout scm
 
     // Run the Gradle build and builds the Docker image
-    docker.build('nemerosa/ontrack-build', 'jenkins/build').inside('--volume=/var/run/docker.sock:/var/run/docker.sock') {
+    docker.build('nemerosa/ontrack-build', 'seed/docker').inside('--volume=/var/run/docker.sock:/var/run/docker.sock') {
         try {
             sh """./gradlew \\
                 clean \\
