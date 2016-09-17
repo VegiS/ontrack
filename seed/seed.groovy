@@ -107,11 +107,18 @@ def withXvfb(def steps, String script) {
 mkdir -p xvfb-\${EXECUTOR_NUMBER}-\${BUILD_NUMBER}
 let 'NUM = EXECUTOR_NUMBER + 1'
 echo "Display number: \${NUM}"
-nohup /usr/bin/Xvfb :\${NUM} -screen 0 1024x768x24 -fbdir xvfb-\${EXECUTOR_NUMBER}-\${BUILD_NUMBER} &
+nohup /usr/bin/Xvfb :\${NUM} -screen 0 1024x768x24 -fbdir xvfb-\${EXECUTOR_NUMBER}-\${BUILD_NUMBER} & > xvfb.pid
+
+# Make sure to stop Xvfb at the end
+trap "kill -KILL `cat xvfb.pid`" EXIT
 
 export DISPLAY=":\${NUM}"
 
 ${script}
+
+# Exit normally in all cases
+# Evaluation is done by test reporting
+exit 0
 """
 }
 
@@ -175,17 +182,25 @@ job("${SEED_PROJECT}-${SEED_BRANCH}-build") {
             }
         }
     }
+    wrappers {
+        injectPasswords {
+            // Needs the VERSIONEYE_API_KEY
+            injectGlobalPasswords()
+        }
+    }
     steps {
         gradle '''\
 clean
 versionDisplay
 versionFile
+versionEyeUpdate
 test
 integrationTest
 dockerLatest
 osPackages
 build
 -PbowerOptions='--allow-root'
+-Dorg.gradle.jvmargs=-Xmx1536m
 --info
 --stacktrace
 --profile
@@ -252,6 +267,7 @@ job("${SEED_PROJECT}-${SEED_BRANCH}-acceptance-local") {
     ciAcceptanceTest \\
     -PacceptanceJar=ontrack-acceptance-${VERSION}.jar \\
     -PciHost=dockerhost \\
+    -Dorg.gradle.jvmargs=-Xmx1536m \\
     --info \\
     --profile \\
     --console plain \\
@@ -261,24 +277,6 @@ job("${SEED_PROJECT}-${SEED_BRANCH}-acceptance-local") {
     publishers {
         buildDescription '', '${VERSION}', '', ''
         archiveJunit('*-tests.xml')
-        if (release) {
-            downstreamParameterized {
-                trigger("${SEED_PROJECT}-${SEED_BRANCH}-acceptance-debian") {
-                    condition 'SUCCESS'
-                    parameters {
-                        currentBuild()
-                    }
-                }
-                centOsVersions.each { centOsVersion ->
-                    trigger("${SEED_PROJECT}-${SEED_BRANCH}-acceptance-centos-${centOsVersion}") {
-                        condition 'SUCCESS'
-                        parameters {
-                            currentBuild()
-                        }
-                    }
-                }
-            }
-        }
         if (release) {
             downstreamParameterized {
                 trigger("${SEED_PROJECT}-${SEED_BRANCH}-docker-push") {
@@ -307,7 +305,7 @@ job("${SEED_PROJECT}-${SEED_BRANCH}-acceptance-local") {
 // OS packages jobs
 // Only for releases
 
-// TODO if (release) {
+ if (release) {
 
     // Debian package acceptance job
 
@@ -316,7 +314,7 @@ job("${SEED_PROJECT}-${SEED_BRANCH}-acceptance-local") {
             numToKeep(40)
             artifactNumToKeep(5)
         }
-        deliveryPipelineConfiguration('Commit', 'Debian package acceptance')
+        deliveryPipelineConfiguration('Acceptance', 'Debian package acceptance')
         preparePipelineJob delegate
         steps {
             // Runs the CI acceptance tests
@@ -325,6 +323,8 @@ job("${SEED_PROJECT}-${SEED_BRANCH}-acceptance-local") {
     debAcceptanceTest \\
     -PacceptanceJar=ontrack-acceptance-\${VERSION}.jar \\
     -PacceptanceDebianDistributionDir=. \\
+    -PacceptanceHost=dockerhost \\
+    -Dorg.gradle.jvmargs=-Xmx1536m \\
     --info \\
     --profile \\
     --console plain \\
@@ -346,7 +346,7 @@ job("${SEED_PROJECT}-${SEED_BRANCH}-acceptance-local") {
                 numToKeep(40)
                 artifactNumToKeep(5)
             }
-            deliveryPipelineConfiguration('Commit', "CentOS ${centOsVersion} package acceptance")
+            deliveryPipelineConfiguration('Acceptance', "CentOS ${centOsVersion} package acceptance")
             preparePipelineJob delegate
             steps {
                 // Runs the CI acceptance tests
@@ -355,6 +355,8 @@ job("${SEED_PROJECT}-${SEED_BRANCH}-acceptance-local") {
     rpmAcceptanceTest${centOsVersion} \\
     -PacceptanceJar=ontrack-acceptance-\${VERSION}.jar \\
     -PacceptanceRpmDistributionDir=. \\
+    -PacceptanceHost=dockerhost \\
+    -Dorg.gradle.jvmargs=-Xmx1536m \\
     --info \\
     --profile \\
     --console plain \\
@@ -368,7 +370,7 @@ job("${SEED_PROJECT}-${SEED_BRANCH}-acceptance-local") {
         }
     }
 
-// TODO }
+}
 
 // Docker push
 
@@ -398,6 +400,24 @@ docker logout
                 }
             }
         }
+        if (release) {
+            downstreamParameterized {
+                trigger("${SEED_PROJECT}-${SEED_BRANCH}-acceptance-debian") {
+                    condition 'SUCCESS'
+                    parameters {
+                        currentBuild()
+                    }
+                }
+                centOsVersions.each { centOsVersion ->
+                    trigger("${SEED_PROJECT}-${SEED_BRANCH}-acceptance-centos-${centOsVersion}") {
+                        condition 'SUCCESS'
+                        parameters {
+                            currentBuild()
+                        }
+                    }
+                }
+            }
+        }
         // Use display version
         ontrackValidation SEED_PROJECT, SEED_BRANCH, '${VERSION}', 'DOCKER'
     }
@@ -424,6 +444,7 @@ job("${SEED_PROJECT}-${SEED_BRANCH}-acceptance-do") {
     -PacceptanceJar=ontrack-acceptance-${VERSION}.jar \\
     -PontrackVersion=${VERSION} \\
     -PdigitalOceanAccessToken=${DO_TOKEN} \\
+    -Dorg.gradle.jvmargs=-Xmx1536m \\
     --info \\
     --profile \\
     --console plain \\
@@ -473,8 +494,10 @@ job("${SEED_PROJECT}-${SEED_BRANCH}-publish") {
 -Psigning.keyId=\${GPG_KEY_ID}
 -Psigning.password=\${GPG_KEY_PASSWORD}
 -Psigning.secretKeyRingFile=\${GPG_KEY_FILE}
--PossrhUser=\\${OSSRH_USER}
--PossrhPassword=\\${OSSRH_PASSWORD}
+-PossrhUser=\${OSSRH_USER}
+-PossrhPassword=\${OSSRH_PASSWORD}
+-PgitHubUser=dcoraboeuf
+-PgitHubPassword=\${GITHUB_TOKEN}
 publicationRelease
 """
         } else {
@@ -497,8 +520,8 @@ publicationMaven
         }
         if (release) {
             shell """\
-docker tag --force nemerosa/ontrack:\${VERSION} nemerosa/ontrack:latest
-docker tag --force nemerosa/ontrack:\${VERSION} nemerosa/ontrack:\${VERSION}
+docker pull nemerosa/ontrack:\${VERSION}
+docker tag nemerosa/ontrack:\${VERSION} nemerosa/ontrack:latest
 docker login --email="damien.coraboeuf+nemerosa@gmail.com" --username="nemerosa" --password="\${DOCKER_PASSWORD}"
 docker push nemerosa/ontrack:\${VERSION}
 docker push nemerosa/ontrack:latest
@@ -633,6 +656,7 @@ productionUpgrade
 --console plain
 --stacktrace
 productionTest
+-Dorg.gradle.jvmargs=-Xmx1536m \\
 -PacceptanceJar=ontrack-acceptance-${VERSION}.jar
 '''
         }
