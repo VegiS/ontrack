@@ -19,7 +19,7 @@ node('docker') {
     dockerLatest \\
     osPackages \\
     build \\
-    -PitJdbcWait=20 \\
+    -PitJdbcWait=60 \\
     -PbowerOptions='--allow-root\' \\
     -Dorg.gradle.jvmargs=-Xmx1536m \\
     --info \\
