@@ -53,9 +53,4 @@ node('docker') {
 
     // TODO Ontrack build
 
-    // Extracts the version from the file
-    def versionInfo = readProperties file: 'build/version.properties'
-    env.VERSION_DISPLAY = versionInfo.VERSION_DISPLAY
-    echo "Version = ${env.VERSION_DISPLAY}"
-
 }
