@@ -53,4 +53,10 @@ node('docker') {
 
     // TODO Ontrack build
 
+    stage 'Local acceptance'
+
+    unstash 'ontrack-archives'
+    unzip test: true, zipFile: "build/distributions/ontrack-${env.VERSION}-delivery.zip"
+
+
 }
