@@ -6,7 +6,17 @@ node('docker') {
 
     stage 'Build'
 
-    docker.build('nemerosa/ontrack-build', 'seed/docker').inside('--volume=/var/run/docker.sock:/var/run/docker.sock') {
+    sh '''\
+      HOSTIP=`ip -4 addr show docker0 | grep 'inet ' | awk '{print $2}' | awk -F '/' '{print $1}'`
+      echo HOSTIP=${HOSTIP}
+      echo HOSTIP=${HOSTIP} > host.properties
+      '''
+
+    def props = readProperties(file: 'host.properties')
+    String hostIP = props.HOSTIP
+    echo "Host IP = ${hostIP}"
+
+    docker.build('nemerosa/ontrack-build', 'seed/docker').inside("--volume=/var/run/docker.sock:/var/run/docker.sock --add-host dockerhost:${hostIP}") {
         try {
             sh '''\
 #!/bin/bash
@@ -19,6 +29,7 @@ node('docker') {
     dockerLatest \\
     osPackages \\
     build \\
+    -PitJdbcHost=dockerhost \\
     -PitJdbcWait=60 \\
     -PbowerOptions='--allow-root\' \\
     -Dorg.gradle.jvmargs=-Xmx1536m \\
