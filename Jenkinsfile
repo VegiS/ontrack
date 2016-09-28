@@ -55,8 +55,12 @@ node('docker') {
 
     stage 'Local acceptance'
 
-    unstash 'ontrack-archives'
-    unzip test: true, zipFile: "build/distributions/ontrack-${env.VERSION}-delivery.zip"
+    docker.build('nemerosa/ontrack-build', 'seed/docker').inside("--volume=/var/run/docker.sock:/var/run/docker.sock --add-host dockerhost:${hostIP}") {
+
+        unstash 'ontrack-archives'
+        unzip test: true, zipFile: "build/distributions/ontrack-${env.VERSION}-delivery.zip"
+
+    }
 
 
 }
