@@ -62,5 +62,22 @@ node('docker') {
 
     }
 
+    stage 'Docker publication'
+
+    parallel digitalocean: {
+        stage 'Digital Ocean acceptance'
+    }, centos6: {
+        stage 'CentOS 6 acceptance'
+    }, centos7: {
+        stage 'CentOS 7 acceptance'
+    }, debian {
+        stage 'Debian acceptance'
+    }, failFast: true
+
+    stage 'Publication'
+
+    stage 'Production'
+
+    stage 'Production tests'
 
 }
