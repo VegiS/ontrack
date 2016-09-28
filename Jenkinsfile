@@ -38,6 +38,13 @@ node('docker') {
     --profile \\
     --console plain
 '''
+            // Reads the version properties
+            props = readProperties(file: 'build/version.properties')
+            env.VERSION = props.VERSION_DISPLAY
+            currentBuild.description = env.VERSION
+            // Archives the delivery archive
+            stash name: 'ontrack-archives',
+                  includes: 'build/distributions/ontrack-*-delivery.zip,build/distributions/ontrack*.deb,build/distributions/ontrack*.rpm'
         } finally {
             // Archiving the tests
             step([$class: 'JUnitResultArchiver', testResults: '**/build/test-results/*.xml'])
