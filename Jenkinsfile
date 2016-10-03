@@ -20,14 +20,13 @@ exit 0
 """
 }
 
-
-//==== BUILD ==============================
-
-stage 'Build'
-
 node('docker') {
 
     checkout scm
+
+    //==== BUILD ==============================
+
+    stage 'Build'
 
     sh '''\
       HOSTIP=`ip -4 addr show docker0 | grep 'inet ' | awk '{print $2}' | awk -F '/' '{print $1}'`
@@ -38,7 +37,6 @@ node('docker') {
     def props = readProperties(file: 'host.properties')
     String hostIP = props.HOSTIP
     echo "Host IP = ${hostIP}"
-    env.DOCKER_HOST = hostIP
 
     docker.build('nemerosa/ontrack-build', 'seed/docker').inside("--volume=/var/run/docker.sock:/var/run/docker.sock --add-host dockerhost:${hostIP}") {
         try {
@@ -68,7 +66,7 @@ node('docker') {
             currentBuild.description = env.VERSION
             // Archives the delivery archive
             stash name: 'ontrack-archives',
-                    includes: 'build/distributions/ontrack-*-delivery.zip,build/distributions/ontrack*.deb,build/distributions/ontrack*.rpm'
+                  includes: 'build/distributions/ontrack-*-delivery.zip,build/distributions/ontrack*.deb,build/distributions/ontrack*.rpm'
         } finally {
             // Archiving the tests
             junit allowEmptyResults: false, testResults: '**/build/test-results/*.xml'
@@ -76,20 +74,15 @@ node('docker') {
     }
 
     // TODO Ontrack build
-}
 
-//==== LOCAL ACCEPTANCE ==============================
+    stage 'Local acceptance'
 
-stage 'Local acceptance'
-
-node ('docker') {
-
-    docker.build('nemerosa/ontrack-build', 'seed/docker').inside("--volume=/var/run/docker.sock:/var/run/docker.sock --add-host dockerhost:${env.DOCKER_HOST}") {
+    docker.build('nemerosa/ontrack-build', 'seed/docker').inside("--volume=/var/run/docker.sock:/var/run/docker.sock --add-host dockerhost:${hostIP}") {
 
         unstash 'ontrack-archives'
         unzip test: true, zipFile: "build/distributions/ontrack-${env.VERSION}-delivery.zip"
 
-        withXvfb delegate, """\
+        withXvfb delegate,  """\
 ./gradlew \\
     ciAcceptanceTest \\
     -PacceptanceJar=build/distributions/ontrack-acceptance-${env.VERSION}.jar \\
@@ -104,8 +97,6 @@ node ('docker') {
         junit allowEmptyResults: false, testResults: '*-tests.xml'
 
     }
-
-}
 
 //    stage 'Docker publication'
 //
@@ -124,3 +115,5 @@ node ('docker') {
 //    stage 'Production'
 //
 //    stage 'Production tests'
+
+}
