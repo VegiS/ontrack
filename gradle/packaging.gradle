@@ -89,6 +89,7 @@ task deliveryPackage(type: Zip) {
         include 'gradlew*'
         include 'gradle/**'
         include 'gradle.properties'
+        include 'seed/**'
         exclude '**/.gradle/**'
         exclude '**/build/**'
     }
