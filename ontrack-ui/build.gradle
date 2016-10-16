@@ -21,7 +21,7 @@ dependencies {
     compile libraries.spring_boot_starter_actuator
 
     // TODO Use proper version of graphql-spring-boot
-    compile 'com.embedler.moon.graphql.boot:graphql-spring-boot-starter:2.2.0-2016-10-16T13-25-11'
+    compile 'com.embedler.moon.graphql.boot:graphql-spring-boot-starter:2.2.0-2016-10-16T19-29-06'
 
     runtime project(':ontrack-service')
     runtime project(':ontrack-repository-impl')
