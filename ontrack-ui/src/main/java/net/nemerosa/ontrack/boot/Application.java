@@ -1,5 +1,6 @@
 package net.nemerosa.ontrack.boot;
 
+import com.oembedler.moon.graphql.boot.EnableGraphQLServer;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.actuate.system.ApplicationPidFileWriter;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
@@ -11,6 +12,7 @@ import java.io.File;
 @Configuration
 @ComponentScan("net.nemerosa.ontrack")
 @EnableAutoConfiguration
+@EnableGraphQLServer
 public class Application {
 
     /**

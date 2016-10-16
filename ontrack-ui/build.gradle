@@ -1,6 +1,8 @@
 buildscript {
     repositories {
         mavenCentral()
+        // TODO Remove when using proper version of graphql-spring-boot
+        mavenLocal()
     }
     dependencies {
         classpath("org.springframework.boot:spring-boot-gradle-plugin:1.4.0.RELEASE")
@@ -17,6 +19,9 @@ dependencies {
     compile libraries.spring_boot_starter_web
     compile libraries.spring_boot_starter_security
     compile libraries.spring_boot_starter_actuator
+
+    // TODO Use proper version of graphql-spring-boot
+    compile 'com.embedler.moon.graphql.boot:graphql-spring-boot-starter:2.2.0-2016-10-16T13-25-11'
 
     runtime project(':ontrack-service')
     runtime project(':ontrack-repository-impl')
